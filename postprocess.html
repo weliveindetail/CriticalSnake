@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CriticalSnake Tests</title>
+  <style>
+    body {
+      background: #333;
+    }
+    pre {
+      color: #fff;
+    }
+    div#osm-map {
+      position: absolute;
+      left: 0px;
+      top: 0px;
+      width: 100%;
+      height: 100%;
+    }
+    div.filtered {
+      -webkit-filter: grayscale(50%);
+      filter: grayscale(50%);
+    }
+  </style>
+</head>
+<body>
+  <div id="osm-map"></div>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.5.1/leaflet.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.5.1/leaflet.js"></script>
+  <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+  <!-- <script src="http://maps.stamen.com/js/tile.stamen.js?v1.3.0"></script> -->
+
+  <script src="critical-snake/bikemap.js"></script>
+  <script src="critical-snake/postprocess.js"></script>
+
+  <script>
+    if (!String.prototype.format) {
+      String.prototype.format = function() {
+        var args = Array.prototype.slice.call(arguments);
+        return this.replace(/{(\d+)}/g, function(match, number) {
+          return typeof args[number] != 'undefined'
+            ? args[number]
+            : match
+          ;
+        });
+      };
+    }
+
+    function parseUrlParams(url) {
+      const regex = /[?&]([^=#]+)=([^&#]*)/g;
+      let params = {};
+      let match;
+      while(match = regex.exec(url)) {
+        params[match[1]] = match[2];
+      }
+
+      if (params["colors"]) {
+        showMarkerColors = true;
+      }
+    }
+
+    let showMarkerColors = false;
+    parseUrlParams(window.location.href);
+
+    function getCoordFilter(name) {
+      switch(name) {
+        case "":
+          return (coord) => true;
+        case "Berlin":
+          return (coord) => {
+            return 52.40 < coord[0] && coord[0] < 52.61 &&
+                    13.23 < coord[1] && coord[1] < 13.56;
+          };
+        case "Barcelona":
+          return (coord) => {
+            return 41.260000 < coord[0] && coord[0] < 41.450000 &&
+                    2.000000 < coord[1] && coord[1] < 2.290000;
+          };
+        default:
+          console.warn("Unknown coordinate filter:", name);
+          return (coord) => true;
+      }
+    }
+
+    const baseLayer = L.tileLayer(
+      'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
+      { attribution:
+          '<a href="{0}">{1}</a> | &copy; <a href="{2}">{3}</a>'.format(
+            'https://foundation.wikimedia.org/wiki/Maps_Terms_of_Use',
+            'Wikimedia maps', 'http://osm.org/copyright', 'OpenStreetMap'
+          )
+      }
+    );
+
+//    let layerUrl = "http://c.tile.stamen.com/watercolor/${z}/${x}/${y}.jpg";
+//    const baseLayer = new L.StamenTileLayer("watercolor", {
+//      detectRetina: true
+//    });
+
+    let bikeMap = createBikeMap(L, baseLayer);
+
+    let initialZoom = false;
+    let playbackFrameIdx = 0;
+    let playbackDataset = null;
+    bikeMap.onPlaybackClicked = (playbackButton, bikeMap) => {
+      if (playbackButton.value == "▶") {
+        playbackButton.value = "||";
+        resume();
+
+        if (initialZoom) {
+          initialZoom = false;
+          const snakeBounds = new L.latLngBounds([
+            playbackDataset.snakeBounds.min,
+            playbackDataset.snakeBounds.max
+          ]);
+
+          bikeMap.fitBounds(snakeBounds, { animate: true });
+        }
+      }
+      else {
+        playbackButton.value = "▶";
+        pause();
+      }
+    };
+
+    bikeMap.onSliderMoved = (sliderElement) => {
+      playbackFrameIdx = sliderElement.value;
+      refreshView();
+    };
+
+    // ----------------------------------------------------
+
+    const markerSizeTemplate =
+      ".map-marker-bike {" +
+      "  width: {0}px; height: {0}px;" +
+      "  margin-left: -{1}px; margin-top: -{1}px;" +
+      "}";
+
+    function initDynamicMarkerSizeCSS(px) {
+      let sheet = document.createElement('style');
+      sheet.type = 'text/css';
+      document.getElementsByTagName('head')[0].appendChild(sheet);
+      return sheet.appendChild(
+        document.createTextNode(markerSizeTemplate.format(px, px / 2)));
+    }
+
+    let dynamicMarkerSizeCSS = initDynamicMarkerSizeCSS(48);
+    bikeMap.onMapZoomed = (bikeMap) => {
+      const px = Math.max(1, bikeMap.getZoom() - 10) * 6;
+      dynamicMarkerSizeCSS.nodeValue = markerSizeTemplate.format(px, px / 2);
+    };
+
+    // ----------------------------------------------------
+
+    function setupMarkerTypes(colors) {
+      const makeMarker = (color) => {
+        return L.icon({
+          iconUrl: 'img/marker-{0}.png'.format(color),
+          className: 'map-marker-bike',
+        });
+      };
+      if (colors)
+        return [
+          makeMarker("grey"), makeMarker("blue"),
+          makeMarker("brown"), makeMarker("pink")
+        ];
+      else
+        return [
+          makeMarker("grey"), makeMarker("blue"),
+          makeMarker("blue"), makeMarker("blue")
+        ];
+    }
+
+    const markers = setupMarkerTypes(showMarkerColors);
+    bikeMap.createMarker = (loc) => {
+      if (loc.snake == null)
+        return L.marker(loc.coord, { icon: markers[0] }); // grey dot
+
+      const iconIdx = Math.min(markers.length - 1, loc.snake + 1);
+      return L.marker(loc.coord, { icon: markers[iconIdx] });
+    };
+
+    // ----------------------------------------------------
+
+    $("#browse").change(function () {
+      $("#browse").hide();
+      $("#progress").text("Loading..");
+      $("#progress").show();
+
+      if (this.files.length == 0)
+        return;
+
+      if (this.files.length > 1)
+        console.warn("Can only playback one file at a time:", this.files[0].name);
+
+      const reader = new FileReader();
+      $(reader).on('load', (event) => {
+        let rawJSONs = [];
+        const lines = event.target.result.split("\n");
+        try {
+          for (const line of lines) {
+            rawJSONs.push(JSON.parse(line));
+          }
+        }
+        catch (ex) {
+          if (lines.length == rawJSONs.length + 1) {
+            console.assert(lines[lines.length - 1] == "");
+            console.log("Received", rawJSONs.length, "frames");
+          }
+          else {
+            console.error("JSON parsing failed on frame", rawJSONs.length,
+                          "Can only playback previous ones.");
+          }
+        }
+
+        const coordFilter = getCoordFilter("Berlin");
+        playbackDataset = postprocess(rawJSONs, coordFilter);
+        playbackFrameIdx = 0;
+
+        (new L.marker(playbackDataset.origin, { icon: markers[2] })).addTo(bikeMap);
+        //(new L.marker(L.latLng(...playbackDataset.snakeBounds.max), { icon: markers[2] })).addTo(bikeMap);
+
+        const snakeBounds = new L.latLngBounds([
+          playbackDataset.snakeBounds.min,
+          playbackDataset.snakeBounds.max
+        ]);
+
+        bikeMap.flyTo(playbackDataset.origin, 16, { animate: true });
+        initialZoom = true;
+
+        $("#progress").hide();
+        $("#playback").show();
+        let stats = $("#stats");
+        stats.css("display", "block");
+        stats.text(toStrUTC(playbackDataset.frames[0].timestamp));
+
+        let slider = $("#history");
+        slider.attr({
+          "min": 0,
+          "max": playbackDataset.frames.length - 1,
+          "value": 0
+        });
+        slider.show();
+      });
+
+      reader.readAsText(this.files[0]);
+    });
+
+    // ----------------------------------------------------
+
+    function toStrUTC(timestamp) {
+      let d = new Date(timestamp * 1000);
+      const pad2 = (val) => (val < 10 ? "0" : "") + val;
+      return "📅 {0}-{1}-{2} 🕗 {3}:{4}".format(
+        d.getFullYear(), pad2(d.getMonth()), pad2(d.getDate()),
+        pad2(d.getHours()), pad2(d.getMinutes())
+      );
+    }
+
+    let playbackEndAction = () => {};
+    function refreshView() {
+      $("#history")[0].value = playbackFrameIdx;
+
+      let frame = playbackDataset.frames[playbackFrameIdx];
+      let trackedBikes = bikeMap.update(frame.locations);
+
+      $("#stats").text("{0} 📍🚲 {1}".format(
+        toStrUTC(frame.timestamp), trackedBikes));
+
+      if (++playbackFrameIdx >= playbackDataset.frames.length) {
+        playbackEndAction();
+      }
+    }
+
+    // ----------------------------------------------------
+
+    let frameTimer = null;
+    let testFPS = 10;
+    function resume() {
+      frameTimer = setInterval(refreshView, 1000 / testFPS);
+      playbackEndAction = () => {
+        clearTimeout(frameTimer);
+        $("#playback").attr("value", "▶");
+        playbackFrameIdx = 0;
+      };
+    }
+
+    function pause() {
+      clearTimeout(frameTimer);
+    }
+  </script>
+</body>
+</html>
