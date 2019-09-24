@@ -5,7 +5,7 @@ function createBikeMap(L, baseLayer) {
   bikeMap.addLayer(baseLayer);
 
   // Customization points to overwrite later
-  bikeMap.onPlaybackClicked = (DomElement, bikeMap) => {};
+  bikeMap.onPlaybackClicked = (DomElement) => {};
   bikeMap.onSliderMoved = (DomElement) => {};
   bikeMap.onMapZoomed = (bikeMap) => {};
   bikeMap.createMarker = (loc) => { return L.marker(loc.coord); };
