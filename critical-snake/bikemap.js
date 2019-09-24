@@ -1,85 +1,96 @@
 
-function createBikeMap(L, baseLayer) {
+function createBikeMap(L, baseLayer, options) {
   let bikeMap = new L.map('osm-map', { zoomControl: false });
   bikeMap.setView([52.5219,13.4045], 13);
   bikeMap.addLayer(baseLayer);
 
-  // Customization points to overwrite later
-  bikeMap.onPlaybackClicked = (DomElement) => {};
-  bikeMap.onSliderMoved = (DomElement) => {};
-  bikeMap.onMapZoomed = (bikeMap) => {};
+  // Customization points
   bikeMap.createMarker = (loc) => { return L.marker(loc.coord); };
-
+  bikeMap.onMapZoomed = (bikeMap) => {};
   bikeMap.on("zoomend", () => {
     bikeMap.onMapZoomed(bikeMap);
-  })
-
-  L.Control.StatsView = L.Control.extend({
-    onAdd: function(map) {
-      let stats = L.DomUtil.create('label', 'leaflet-bar');
-      stats.id = "stats";
-      stats.style.padding = "3px 8px";
-      stats.style.backgroundColor = "#fff";
-      stats.style.display = "none";
-      return stats;
-    }
   });
 
-  L.Control.PlaybackCtrls = L.Control.extend({
-    onAdd: function(map) {
-      let playbackCtrls = L.DomUtil.create('div', 'leaflet-bar');
-      playbackCtrls.style.display = "flex";
-      playbackCtrls.style.backgroundColor = "#fff";
-      playbackCtrls.style.padding = "5px";
+  if (options.showStats) {
+    L.Control.StatsView = L.Control.extend({
+      onAdd: function(map) {
+        let stats = L.DomUtil.create('label', 'leaflet-bar');
+        stats.id = "stats";
+        stats.style.padding = "3px 8px";
+        stats.style.backgroundColor = "#fff";
+        stats.style.display = "none";
+        return stats;
+      }
+    });
+  }
 
-      let browse = L.DomUtil.create('input', '', playbackCtrls);
-      browse.type = "file";
-      browse.id = "browse";
-      browse.style.border = "0";
+  if (options.showControls) {
+    // Customization points
+    bikeMap.onPlaybackClicked = (DomElement) => {};
+    bikeMap.onSliderMoved = (DomElement) => {};
 
-      let progress = L.DomUtil.create('label', '', playbackCtrls);
-      progress.id = "progress";
-      progress.style.display = "none";
+    L.Control.PlaybackCtrls = L.Control.extend({
+      onAdd: function(map) {
+        let playbackCtrls = L.DomUtil.create('div', 'leaflet-bar');
+        playbackCtrls.style.display = "flex";
+        playbackCtrls.style.backgroundColor = "#fff";
+        playbackCtrls.style.padding = "5px";
 
-      let playback = L.DomUtil.create('input', '', playbackCtrls);
-      playback.type = "button";
-      playback.id = "playback";
-      playback.value = "▶";
-      playback.style.display = "none";
-      playback.style.border = "0";
+        let browse = L.DomUtil.create('input', '', playbackCtrls);
+        browse.type = "file";
+        browse.id = "browse";
+        browse.style.border = "0";
 
-      let slider = L.DomUtil.create('input', '', playbackCtrls);
-      slider.type = "range";
-      slider.id = "history";
-      slider.style.display = "none";
+        let progress = L.DomUtil.create('label', '', playbackCtrls);
+        progress.id = "progress";
+        progress.style.display = "none";
 
-      L.DomEvent.on(playbackCtrls, 'mouseover', () => {
-        map.dragging.disable();
-      }, this);
+        let playback = L.DomUtil.create('input', '', playbackCtrls);
+        playback.type = "button";
+        playback.id = "playback";
+        playback.value = "▶";
+        playback.style.display = "none";
+        playback.style.border = "0";
 
-      L.DomEvent.on(playbackCtrls, 'mouseout', () => {
-        map.dragging.enable();
-      }, this);
+        let slider = L.DomUtil.create('input', '', playbackCtrls);
+        slider.type = "range";
+        slider.id = "history";
+        slider.style.display = "none";
 
-      L.DomEvent.on(playback, 'click', () => {
-        bikeMap.onPlaybackClicked(playback, map);
-      }, this);
+        L.DomEvent.on(playbackCtrls, 'mouseover', () => {
+          map.dragging.disable();
+        }, this);
 
-      L.DomEvent.on(slider, 'input', () => {
-        bikeMap.onSliderMoved(slider);
-      }, this);
+        L.DomEvent.on(playbackCtrls, 'mouseout', () => {
+          map.dragging.enable();
+        }, this);
 
-      return playbackCtrls;
-    },
+        L.DomEvent.on(playback, 'click', () => {
+          bikeMap.onPlaybackClicked(playback, map);
+        }, this);
 
-    onRemove: function(map) {
-      L.DomEvent.off();
-    }
-  });
+        L.DomEvent.on(slider, 'input', () => {
+          bikeMap.onSliderMoved(slider);
+        }, this);
 
-  (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
-  (new L.Control.PlaybackCtrls({ position: 'bottomleft' })).addTo(bikeMap);
-  (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
+        return playbackCtrls;
+      },
+
+      onRemove: function(map) {
+        L.DomEvent.off();
+      }
+    });
+  }
+
+  if (options.showStats) {
+    (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
+  }
+  if (options.showControls) {
+    (new L.Control.PlaybackCtrls({ position: 'bottomleft' })).addTo(bikeMap);
+  }
+  if (options.showZoom) {
+    (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
+  }
 
   bikeMap.participants = [];
   bikeMap.candidates = [];

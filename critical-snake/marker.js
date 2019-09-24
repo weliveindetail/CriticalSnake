@@ -1,3 +1,9 @@
+function makeIcon(color) {
+  return L.icon({
+    iconUrl: 'img/marker-{0}.png'.format(color),
+    className: 'map-marker-bike',
+  });
+}
 
 function createMarkers(L, colors) {
   const markerSizeClass =
@@ -19,19 +25,12 @@ function createMarkers(L, colors) {
     dynNodeCSS.nodeValue = markerSizeClass.format(px, px / 2);
   };
 
-  const makeMarker = (color) => {
-    return L.icon({
-      iconUrl: 'img/marker-{0}.png'.format(color),
-      className: 'map-marker-bike',
-    });
-  };
+  this.origin = makeIcon("red");
 
-  this.origin = makeMarker("red");
-
-  const grey = makeMarker("grey");
+  const grey = makeIcon("grey");
   const snakes = colors
-      ? [ makeMarker("blue"), makeMarker("brown"), makeMarker("pink") ]
-      : [ makeMarker("blue") ];
+      ? [ makeIcon("blue"), makeIcon("brown"), makeIcon("pink") ]
+      : [ makeIcon("blue") ];
 
   this.bySnakeIdx = (snake) => {
     if (snake == null)

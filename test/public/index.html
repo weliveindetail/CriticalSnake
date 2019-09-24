@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CriticalSnake Tests</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      color: #fff;
+    }
+    label {
+      font-size: 0.75em;
+    }
+    span {
+      padding: 0 10px;
+    }
+    div#controls {
+      position: absolute;
+      left: 0px;
+      top: 0px;
+      width: 100%;
+      height: auto;
+      z-index: 9999;
+      background: rgba(50, 50, 50, 0.8);
+    }
+    div#osm-map {
+      position: absolute;
+      left: 0px;
+      top: 0px;
+      width: 100%;
+      height: 100%;
+    }
+    div#terminal {
+      position: absolute;
+      left: 0px;
+      top: 0px;
+      width: 100%;
+      height: 0px;
+      z-index: 9998;
+      background: rgba(50, 50, 50, 0.8);
+    }
+    .map-marker-bike {
+      width: 48px;
+      height: 48px;
+      margin-left: -24px;
+      margin-top: -24px;
+    }
+    pre {
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <div id="osm-map"></div>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.5.1/leaflet.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.5.1/leaflet.js"></script>
+  <script src="https://code.jquery.com/jquery-1.10.2.min.js"></script>
+
+  <script src="critical-snake/common.js"></script>
+  <script src="critical-snake/marker.js"></script>
+  <script src="critical-snake/bikemap.js"></script>
+  <script src="critical-snake/utils.js"></script>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const baseLayer = L.tileLayer(
+      'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
+      { attribution:
+          '<a href="{0}">{1}</a> | &copy; <a href="{2}">{3}</a>'.format(
+            'https://foundation.wikimedia.org/wiki/Maps_Terms_of_Use',
+            'Wikimedia maps', 'http://osm.org/copyright', 'OpenStreetMap'
+          )
+      }
+    );
+
+    let bikeMap = createBikeMap(L, baseLayer, {
+      showStats: false, showControls: false, showZoom: true
+    });
+
+    bikeMap.createMarker = (loc) => {
+      return L.marker([toFloat(loc.latitude), toFloat(loc.longitude)], {
+        icon: makeIcon("blue")
+      });
+    };
+
+    let dataSourceUrl = "postv2";
+    let testFPS = 10;
+    let testDatasetId = "";
+    let testCoordFilter = (lat, lng) => true;
+
+    function verifyData(data) {
+      if (!data) {
+        console.error("Error querying data from", dataSourceUrl);
+        return false;
+      }
+      if (!data.locations || data.locations === {}) {
+        console.warn("No locations in data queried from", dataSourceUrl);
+        return false;
+      }
+      return true;
+    }
+
+    function fetchData() {
+      $.getJSON(dataSourceUrl)
+        .done(data => {
+          if (verifyData(data)) {
+            bikeMap.update(data.locations);
+            console.log("Locations:", bikeMap.candidates);
+          }
+        })
+        .fail(() => {
+          console.error("Error querying data from", dataSourceUrl);
+        });
+    }
+
+    $(function() {
+      let socket = io();
+      let fetchTimer = null;
+      socket.on('connected', () => {
+        console.log("Connected");
+        socket.emit('select_datasets', testDatasetId);
+      });
+      socket.on('ready', () => {
+        socket.emit('next_testcase', testFPS);
+      });
+      socket.on('done', () => {
+        console.log("Finished");
+      });
+      socket.on('begin_testcase', (dataset) => {
+        console.log("Begin test ", dataset);
+        fetchTimer = setInterval(fetchData, 1000 / testFPS);
+      });
+      socket.on('end_testcase', (dataset) => {
+        console.log("End test ", dataset);
+        clearTimeout(fetchTimer);
+        socket.emit('next_testcase', testFPS);
+      });
+      socket.on('abort', (msg) => {
+        console.error("Host error:", msg);
+        clearTimeout(fetchTimer);
+      });
+    });
+
+
+    function parseUrlParams(url) {
+      const regex = /[?&]([^=#]+)=([^&#]*)/g;
+      let params = {};
+      let match;
+      while(match = regex.exec(url)) {
+        params[match[1]] = match[2];
+      }
+
+      if (params["dataset"]) {
+        testDatasetId = params["dataset"];
+      }
+      if (params["location"]) {
+        testCoordFilter = getCoordFilter(params["location"]);
+      }
+      if (params["fps"]) {
+        testFPS = params["fps"];
+      }
+    }
+
+    $(parseUrlParams(window.location.href));
+  </script>
+</body>
+</html>

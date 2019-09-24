@@ -56,7 +56,10 @@
 //      detectRetina: true
 //    });
 
-    let bikeMap = createBikeMap(L, baseLayer);
+    let bikeMap = createBikeMap(L, baseLayer, {
+      showStats: true, showControls: true, showZoom: true
+    });
+
     let markers = createMarkers(L, showMarkerColors);
     bikeMap.createMarker = (loc) => {
       return L.marker(loc.coord, { icon: markers.bySnakeIdx(loc.snake) });

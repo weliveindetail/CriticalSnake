@@ -76,12 +76,6 @@ function postprocess(datasetArray, coordFilter) {
     };
   };
 
-  const toFloat = (oldFormat) => {
-    let chars = oldFormat.toString().split('');
-    chars.splice(-6, 0, '.');
-    return chars.join( '' );
-  };
-
   console.log("Initial size:", JSON.stringify(datasetArray).length);
 
   let postprocessedData = {

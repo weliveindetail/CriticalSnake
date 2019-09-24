@@ -19,6 +19,12 @@ function getCoordFilter(name) {
   }
 }
 
+const toFloat = (oldFormat) => {
+  let chars = oldFormat.toString().split('');
+  chars.splice(-6, 0, '.');
+  return chars.join( '' );
+};
+
 function toDateUTC(timestamp) {
   const d = new Date(timestamp * 1000);
   const pad2 = (val) => (val < 10 ? "0" : "") + val;
