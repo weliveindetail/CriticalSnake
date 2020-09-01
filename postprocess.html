@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CriticalSnake Tests</title>
+  <title>CriticalSnake Replay</title>
   <style>
     body {
       background: #333;
@@ -35,6 +35,7 @@
   <script src="critical-snake/marker.js"></script>
   <script src="critical-snake/bikemap.js"></script>
   <script src="critical-snake/postprocess.js"></script>
+  <script src="critical-snake/postprocess-new.js"></script>
   <script src="critical-snake/utils.js"></script>
 
   <script>
@@ -99,54 +100,42 @@
         console.warn("Can only playback one file at a time:", this.files[0].name);
 
       const reader = new FileReader();
-      $(reader).on('load', (event) => {
+      if (this.files[0].name.endsWith("test")) {
         let rawJSONs = [];
-        const lines = event.target.result.split("\n");
-        try {
-          for (const line of lines) {
-            rawJSONs.push(JSON.parse(line));
+        $(reader).on('load', (event) => {
+          const lines = event.target.result.split("\n");
+          try {
+            for (const line of lines) {
+              rawJSONs.push(JSON.parse(line));
+            }
           }
-        }
-        catch (ex) {
-          if (lines.length == rawJSONs.length + 1) {
-            console.assert(lines[lines.length - 1] == "");
-            console.log("Received", rawJSONs.length, "frames");
+          catch (ex) {
+            if (lines.length == rawJSONs.length + 1) {
+              console.assert(lines[lines.length - 1] == "");
+              console.log("Received", rawJSONs.length, "frames");
+            }
+            else {
+              console.error("JSON parsing failed on frame", rawJSONs.length,
+                            "Can only playback previous ones.");
+            }
           }
-          else {
-            console.error("JSON parsing failed on frame", rawJSONs.length,
-                          "Can only playback previous ones.");
-          }
-        }
-
-        playbackDataset = postprocess(rawJSONs, getCoordFilter("Berlin"));
-        playbackFrameIdx = 0;
-
-        (new L.marker(playbackDataset.origin, { icon: markers.origin })).addTo(bikeMap);
-        //(new L.marker(L.latLng(...playbackDataset.snakeBounds.max), { icon: markers[2] })).addTo(bikeMap);
-
-        const snakeBounds = new L.latLngBounds([
-          playbackDataset.snakeBounds.min,
-          playbackDataset.snakeBounds.max
-        ]);
-
-        const zoomLevel = 16;
-        bikeMap.flyTo(playbackDataset.origin, zoomLevel, { animate: true });
-
-        $("#progress").hide();
-        $("#playback").show();
-        let stats = $("#stats");
-        const stamp = playbackDataset.frames[0].timestamp;
-        stats.text("📅 {0} 🕗 {1}".format(toDateUTC(stamp), toTimeUTC(stamp)));
-        stats.css("display", "block");
-
-        let slider = $("#history");
-        slider.attr({
-          "min": 0,
-          "max": playbackDataset.frames.length - 1,
-          "value": 0
+          playbackDataset = postprocess(rawJSONs, getCoordFilter("Berlin"));
+          runDataSet(playbackDataset);
         });
-        slider.show();
-      });
+      } else {
+        $(reader).on('load', (event) => {
+          const lines = event.target.result;
+          try {
+            const dataset = JSON.parse(lines);
+            playbackDataset = postprocess_new(dataset, getCoordFilter("Berlin"));
+            runDataSet(playbackDataset);
+          }
+          catch (ex) {
+            console.error("JSON parsing for file", this.files[0].name,
+                          "failed with", ex);
+          }
+        });
+      }
 
       reader.readAsText(this.files[0]);
     });
@@ -205,6 +194,36 @@
 
     function isRunning(playbackButton) {
       return playbackButton.value != "▶";
+    }
+
+    function runDataSet(playbackDataset) {
+      playbackFrameIdx = 0;
+
+      (new L.marker(playbackDataset.origin, { icon: markers.origin })).addTo(bikeMap);
+      //(new L.marker(L.latLng(...playbackDataset.snakeBounds.max), { icon: markers[2] })).addTo(bikeMap);
+
+      const snakeBounds = new L.latLngBounds([
+        playbackDataset.snakeBounds.min,
+        playbackDataset.snakeBounds.max
+      ]);
+
+      const zoomLevel = 16;
+      bikeMap.flyTo(playbackDataset.origin, zoomLevel, { animate: true });
+
+      $("#progress").hide();
+      $("#playback").show();
+      let stats = $("#stats");
+      const stamp = playbackDataset.frames[0].timestamp;
+      stats.text("📅 {0} 🕗 {1}".format(toDateUTC(stamp), toTimeUTC(stamp)));
+      stats.css("display", "block");
+
+      let slider = $("#history");
+      slider.attr({
+        "min": 0,
+        "max": playbackDataset.frames.length - 1,
+        "value": 0
+      });
+      slider.show();
     }
   </script>
 </body>
