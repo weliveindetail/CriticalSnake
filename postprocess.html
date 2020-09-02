@@ -128,6 +128,7 @@
           try {
             const dataset = JSON.parse(lines);
             playbackDataset = postprocess_new(dataset, getCoordFilter("Berlin"));
+            drawTracks(playbackDataset.tracks);
             runDataSet(playbackDataset);
           }
           catch (ex) {
@@ -224,6 +225,19 @@
         "value": 0
       });
       slider.show();
+    }
+
+    function drawTracks(tracks) {
+      for (let t = 0; t < tracks.length; t++) {
+        const coords = [];
+        for (const coord of tracks[t]) {
+          coords.push(L.latLng(coord.lat, coord.lng));
+        }
+        L.polyline(coords, {
+          color: `hsl(${t},100%,50%)`,
+          opacity: 0.75
+        }).addTo(bikeMap);
+      }
     }
   </script>
 </body>
