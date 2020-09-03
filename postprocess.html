@@ -139,7 +139,7 @@
             console.log("Filtered", NewStylePostProcess.filteredDupes, "duplicate data points");
             console.log("Filtered", NewStylePostProcess.filteredOutOfRange, "data points outside area of interest");
 
-            drawTracks(playbackDataset.tracks);
+            drawTracks(NewStylePostProcess.tracks);
             runDataSet(playbackDataset);
           }
           catch (ex) {
