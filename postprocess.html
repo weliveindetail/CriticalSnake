@@ -86,6 +86,14 @@
       markers.updateSize(px);
     };
 
+    const NewStylePostProcess = new CriticalSnake.PostProcessor({
+      coordFilter: getCoordFilter("Berlin"),
+      splitTrack: {
+        gapDuration: 300, // seconds
+        gapDistance: 1000 // meters
+      }
+    });
+
     // ----------------------------------------------------
 
     $("#browse").change(function () {
@@ -127,7 +135,10 @@
           const lines = event.target.result;
           try {
             const dataset = JSON.parse(lines);
-            playbackDataset = postprocess_new(dataset, getCoordFilter("Berlin"));
+            playbackDataset = NewStylePostProcess.run(dataset);
+            console.log("Filtered", NewStylePostProcess.filteredDupes, "duplicate data points");
+            console.log("Filtered", NewStylePostProcess.filteredOutOfRange, "data points outside area of interest");
+
             drawTracks(playbackDataset.tracks);
             runDataSet(playbackDataset);
           }

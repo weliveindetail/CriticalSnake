@@ -1,3 +1,5 @@
+(function(CriticalSnake) {
+
 function back(array) {
   return array.length > 0 ? array[array.length - 1] : null;
 }
@@ -72,109 +74,116 @@ function calculateVector(latest, next) {
   }
 }
 
-function splitTrack(vector) {
-  if (vector.duration > 300) {
-    return true; // No update since 5min.
+
+CriticalSnake.PostProcessor = function(options) {
+
+  function splitTrack(vector) {
+    if (vector.duration > options.splitTrack.gapDuration) {
+      return true;
+    }
+    if (vector.distance > options.splitTrack.gapDistance) {
+      return true;
+    }
+    return false;
   }
-  if (vector.distance > 1000) {
-    return true; // No update since 1km.
-  }
-  return false;
-}
 
-function postprocess_new(dataset, coordFilter) {
-  let filteredDupes = 0;
-  let filteredOutOfRange = 0;
+  this.run = (dataset) => {
 
-  // Use simple integers as track IDs.
-  let nextIndex = 0;
-  let indexMap = {};
-  const hashToIdx = (hash) => {
-    if (!indexMap.hasOwnProperty(hash)) {
-      // For split-tracks we can have multiple indexes for one participant.
-      indexMap[hash] = [ nextIndex++ ];
-    }
-    // Latest track-index for the participant.
-    return back(indexMap[hash]);
-  };
-  const newIdxForHash = (hash) => {
-    if (!indexMap.hasOwnProperty(hash)) {
-      console.error("Invalid use of newIdxForHash()");
-    }
-    indexMap[hash].push(nextIndex++);
-    return back(indexMap[hash]);
-  };
+    // Use simple integers as track IDs.
+    let nextIndex = 0;
+    let indexMap = {};
+    const hashToIdx = (hash) => {
+      if (!indexMap.hasOwnProperty(hash)) {
+        // For split-tracks we can have multiple indexes for one participant.
+        indexMap[hash] = [ nextIndex++ ];
+      }
+      // Latest track-index for the participant.
+      return back(indexMap[hash]);
+    };
+    const newIdxForHash = (hash) => {
+      if (!indexMap.hasOwnProperty(hash)) {
+        console.error("Invalid use of newIdxForHash()");
+      }
+      indexMap[hash].push(nextIndex++);
+      return back(indexMap[hash]);
+    };
 
-  // Make a tracks of data points by ID and deduplicate entries.
-  const tracks = [];
-  const addToTrack = (participant, dataPoint) => {
-    if (!coordFilter([ dataPoint.lat, dataPoint.lng ])) {
-      filteredOutOfRange += 1;
-      return;
-    }
-
-    const idx = hashToIdx(participant);
-    if (tracks.length <= idx) {
-      tracks[idx] = [ dataPoint ];
-      return;
-    }
-
-    const latest = back(tracks[idx]);
-    if (latest.timestamp == dataPoint.timestamp) {
-      filteredDupes += 1;
-    }
-    else if (latest.lat == dataPoint.lat && latest.lng == dataPoint.lng) {
-      // TODO: We should record a min/max timestamp here.
-      filteredDupes += 1;
-    }
-    else if (latest.timestamp > dataPoint.timestamp) {
-      console.error("Invalid dataset ordering: timestamp", latest.timestamp,
-                    "> timestamp", dataPoint.timestamp);
-    }
-    else {
-      // The vecotr is the transition info between the last and the current data-point.
-      const vector = calculateVector(latest, dataPoint);
-      if (vector == null) {
-        // Drop data-point.
+    // Make a tracks of data points by ID and deduplicate entries.
+    const tracks = [];
+    const addToTrack = (participant, dataPoint) => {
+      if (!options.coordFilter([ dataPoint.lat, dataPoint.lng ])) {
+        this.filteredOutOfRange += 1;
         return;
       }
 
-      if (splitTrack(vector)) {
-        // Drop the vector and create a new track for this data-point.
-        const newIdx = newIdxForHash(participant);
-        tracks[newIdx] = [ dataPoint ];
+      const idx = hashToIdx(participant);
+      if (tracks.length <= idx) {
+        tracks[idx] = [ dataPoint ];
+        return;
+      }
+
+      const latest = back(tracks[idx]);
+      if (latest.timestamp == dataPoint.timestamp) {
+        this.filteredDupes += 1;
+      }
+      else if (latest.lat == dataPoint.lat && latest.lng == dataPoint.lng) {
+        // TODO: We should record a min/max timestamp here.
+        this.filteredDupes += 1;
+      }
+      else if (latest.timestamp > dataPoint.timestamp) {
+        console.error("Invalid dataset ordering: timestamp", latest.timestamp,
+                      "> timestamp", dataPoint.timestamp);
       }
       else {
-        // Add vector nd data-point to the current track.
-        latest.vector = vector;
-        tracks[idx].push(dataPoint);
+        // The vecotr is the transition info between the last and the current data-point.
+        const vector = calculateVector(latest, dataPoint);
+        if (vector == null) {
+          // Drop data-point.
+          return;
+        }
+
+        if (splitTrack(vector)) {
+          // Drop the vector and create a new track for this data-point.
+          const newIdx = newIdxForHash(participant);
+          tracks[newIdx] = [ dataPoint ];
+        }
+        else {
+          // Add vector nd data-point to the current track.
+          latest.vector = vector;
+          tracks[idx].push(dataPoint);
+        }
+      }
+    };
+
+    // Dataset pass: populate tracks
+    for (const snapshot in dataset) {
+      for (const participant in dataset[snapshot]) {
+        const dataPoint = dataset[snapshot][participant];
+        addToTrack(participant, {
+          timestamp: dataPoint.timestamp,
+          lat: floatCoord(dataPoint.latitude),
+          lng: floatCoord(dataPoint.longitude)
+        });
       }
     }
-  };
 
-  // Dataset pass: populate tracks
-  for (const snapshot in dataset) {
-    for (const participant in dataset[snapshot]) {
-      const dataPoint = dataset[snapshot][participant];
-      addToTrack(participant, {
-        timestamp: dataPoint.timestamp,
-        lat: floatCoord(dataPoint.latitude),
-        lng: floatCoord(dataPoint.longitude)
-      });
-    }
-  }
+    console.log(tracks);
 
-  console.log("Filtered", filteredDupes, "duplicate data points");
-  console.log("Filtered", filteredOutOfRange, "data points outside area of interest");
-  console.log(tracks);
+    return {
+      origin: [52.5, 13.4],
+      snakeBounds: initialCoordBounds(),
+      frames: [{
+        coord: [52.51, 13.41],
+        snake: null
+      }],
+      tracks: tracks
+    };
+  }; // CriticalSnake.PostProcessor.run()
 
-  return {
-    origin: [52.5, 13.4],
-    snakeBounds: initialCoordBounds(),
-    frames: [{
-      coord: [52.51, 13.41],
-      snake: null
-    }],
-    tracks: tracks
-  };
-}
+
+  this.filteredDupes = 0;
+  this.filteredOutOfRange = 0;
+
+}; // CriticalSnake.PostProcessor
+
+})(window.CriticalSnake = window.CriticalSnake || {});
