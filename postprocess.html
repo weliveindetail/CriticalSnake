@@ -142,7 +142,7 @@
             console.log("Filtered", NewStylePostProcess.filteredDupes, "duplicate data points");
             console.log("Filtered", NewStylePostProcess.filteredOutOfRange, "data points outside area of interest");
 
-            drawTracks(NewStylePostProcess.tracks);
+            drawTracks(NewStylePostProcess.tracks, Date.now());
             runDataSet(playbackDataset);
           }
           catch (ex) {
@@ -171,11 +171,20 @@
 
       $("#history")[0].value = playbackFrameIdx;
 
-      let frame = playbackDataset.frames[playbackFrameIdx];
-      let trackedBikes = bikeMap.update(frame.locations);
+      if (NewStylePostProcess.tracks) {
+        const begin = playbackDataset.timeRange[0].getTime();
+        const end = playbackDataset.timeRange[1].getTime();
+        const offset = (end - begin) * (playbackFrameIdx / 100);
 
-      $("#stats").text("📅 {0} 🕗 {1} 📍🚲 {2}".format(
-        toDateUTC(frame.timestamp), toTimeUTC(frame.timestamp), trackedBikes));
+        drawTracks(NewStylePostProcess.tracks, new Date(begin + offset));
+      }
+      else {
+        let frame = playbackDataset.frames[playbackFrameIdx];
+        let trackedBikes = bikeMap.update(frame.locations);
+
+        $("#stats").text("📅 {0} 🕗 {1} 📍🚲 {2}".format(
+          toDateUTC(frame.timestamp), toTimeUTC(frame.timestamp), trackedBikes));
+      }
 
       playbackFrameIdx += 1;
     }
@@ -233,21 +242,34 @@
       stats.css("display", "block");
 
       let slider = $("#history");
-      slider.attr({
-        "min": 0,
-        "max": playbackDataset.frames.length - 1,
-        "value": 0
-      });
+      if (playbackDataset.timeRange) {
+        slider.attr({
+          "min": 0,
+          "max": 100,
+          "value": 0
+        });
+      }
+      else {
+        slider.attr({
+          "min": 0,
+          "max": playbackDataset.frames.length - 1,
+          "value": 0
+        });
+      }
       slider.show();
     }
 
-    function drawTracks(tracks) {
+    function drawTracks(tracks, maxTimestamp) {
       for (let t = 0; t < tracks.length; t++) {
+        if (tracks[t].polyline)
+          bikeMap.removeLayer(tracks[t].polyline);
         const coords = [];
         for (const coord of tracks[t]) {
+          if (coord.stamp > maxTimestamp)
+            break;
           coords.push(L.latLng(coord.lat, coord.lng));
         }
-        L.polyline(coords, {
+        tracks[t].polyline = L.polyline(coords, {
           color: `hsl(${t},100%,50%)`,
           opacity: 0.75
         }).addTo(bikeMap);

@@ -184,9 +184,17 @@ CriticalSnake.PostProcessor = function(options) {
       return true;
     });
 
+    let minEpoch = 8640000000000;
+    let maxEpoch = 0;
+    for (const track of self.tracks) {
+      minEpoch = Math.min(minEpoch, track[0].stamp.getTime() / 1000);
+      maxEpoch = Math.max(maxEpoch, back(track).stamp.getTime() / 1000);
+    }
+
     return {
       origin: [52.5, 13.4],
       snakeBounds: initialCoordBounds(),
+      timeRange: [ new Date(minEpoch * 1000), new Date(maxEpoch * 1000)],
       frames: [{
         coord: [52.51, 13.41],
         snake: null
