@@ -81,54 +81,42 @@ CriticalSnake.PostProcessor = function(options) {
 
   // The vector is the transition info between the last and the current
   // data-point in the track.
-  function calculateVector(participant, dataPoint) {
-    if (!options.coordFilter([ dataPoint.lat, dataPoint.lng ])) {
-      self.filteredOutOfRange += 1;
-      return null;
-    }
-
-    const idx = hashToIdx(participant);
-    if (self.tracks.length <= idx) {
-      self.tracks[idx] = [ dataPoint ];
-      return null;
-    }
-
-    const latest = back(self.tracks[idx]);
-    if (latest.stamp == dataPoint.stamp) {
+  function calculateVector(latest, next) {
+    if (latest.stamp == next.stamp) {
       self.filteredDupes += 1;
       return null;
     }
 
     // TODO: We should record a min/max timestamp here.
-    if (latest.lat == dataPoint.lat && latest.lng == dataPoint.lng) {
+    if (latest.lat == next.lat && latest.lng == next.lng) {
       self.filteredDupes += 1;
       return null;
     }
 
-    if (latest.stamp > dataPoint.stamp) {
+    if (latest.stamp > next.stamp) {
       console.error("Invalid dataset ordering: timestamp", latest.stamp,
-                    "> timestamp", dataPoint.stamp);
+                    "> timestamp", next.stamp);
       return null;
     }
 
-    const radians = directionAngleRadians(latest, dataPoint);
+    const radians = directionAngleRadians(latest, next);
     if (radians < 0 || radians > 2 * Math.PI || isNaN(radians)) {
       console.warn("Dropping data-point due to invalid direction",
-                  radians, " (radians) from", latest, "to", dataPoint);
+                  radians, " (radians) from", latest, "to", next);
       return null;
     }
 
-    const meters = haversineMeters(latest, dataPoint);
+    const meters = haversineMeters(latest, next);
     if (meters <= 0) {
       console.warn("Dropping data-point due to invalid distance",
-                  meters, "(meters) from", latest, "to", dataPoint);
+                  meters, "(meters) from", latest, "to", next);
       return null;
     }
 
-    const seconds = (dataPoint.stamp - latest.stamp) / 1000;
+    const seconds = (next.stamp - latest.stamp) / 1000;
     if (seconds < 0) {
       console.warn("Dropping data-point due to invalid duration",
-                  seconds, " (seconds) from", latest, "to", dataPoint);
+                  seconds, " (seconds) from", latest, "to", next);
       return null;
     }
 
@@ -145,7 +133,20 @@ CriticalSnake.PostProcessor = function(options) {
     for (const snapshot in dataset) {
       for (const participant in dataset[snapshot]) {
         const dataPoint = importApiVersion2DataPoint(dataset[snapshot][participant]);
-        const vector = calculateVector(participant, dataPoint);
+
+        if (!options.coordFilter([ dataPoint.lat, dataPoint.lng ])) {
+          self.filteredOutOfRange += 1;
+          continue;
+        }
+
+        const idx = hashToIdx(participant);
+        if (self.tracks.length <= idx) {
+          self.tracks[idx] = [ dataPoint ];
+          continue;
+        }
+
+        const latest = back(self.tracks[idx]);
+        const vector = calculateVector(latest, dataPoint);
 
         if (vector) {
           if (splitTrack(vector)) {
@@ -156,8 +157,7 @@ CriticalSnake.PostProcessor = function(options) {
           else {
             // Add vector to the latest data-point in the track and push the new
             // data-point on top.
-            const idx = hashToIdx(participant);
-            back(self.tracks[idx]).vector = vector;
+            latest.vector = vector;
             self.tracks[idx].push(dataPoint);
           }
         }
