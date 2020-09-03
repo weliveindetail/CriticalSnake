@@ -164,44 +164,6 @@ function postprocess_new(dataset, coordFilter) {
     }
   }
 
-//  const vectors = [];
-//  const addVector = (startpoint, endpoint) => {
-//    const vector = {
-//      timestamp: startpoint.timestamp,
-//      lat: startpoint.lat,
-//      lng: startpoint.lng
-//    };
-//
-//    vector.dir = directionAngleRadians(startpoint, endpoint);
-//    if (vector.dir < 0 || vector.dir > 2 * Math.PI || isNaN(vector.dir)) {
-//      console.warn("Strange direction", vector.dir, "from", startpoint,
-//                   "to", endpoint);
-//    }
-//
-//    vector.dist = haversineMeters(startpoint, endpoint);
-//    if (vector.dist <= 0 || vector.dist > 1000) {
-//      console.warn("Strange distance", vector.dist, "from", startpoint,
-//                   "to", endpoint);
-//    }
-//
-//    vector.dur = (new Date(endpoint.timestamp * 1000) -
-//                  new Date(startpoint.timestamp * 1000)) / 1000;
-//    const fiveMinutes = 300;
-//    if (vector.dur < 0 || vector.dur > fiveMinutes) {
-//      console.warn("Strange duration", vector.dur, "from", startpoint,
-//                   "to", endpoint);
-//    }
-//
-//    vectors.push(vector);
-//  };
-//
-//  // Tracks pass: populate vectors
-//  for (const track of tracks) {
-//    for (let i = 0; i < track.length - 1; i++) {
-//      addVector(track[i], track[i + 1]);
-//    }
-//  }
-
   console.log("Filtered", filteredDupes, "duplicate data points");
   console.log("Filtered", filteredOutOfRange, "data points outside area of interest");
   console.log(tracks);
