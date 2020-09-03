@@ -223,23 +223,8 @@
     function runDataSet(playbackDataset) {
       playbackFrameIdx = 0;
 
-      (new L.marker(playbackDataset.origin, { icon: markers.origin })).addTo(bikeMap);
-      //(new L.marker(L.latLng(...playbackDataset.snakeBounds.max), { icon: markers[2] })).addTo(bikeMap);
-
-      const snakeBounds = new L.latLngBounds([
-        playbackDataset.snakeBounds.min,
-        playbackDataset.snakeBounds.max
-      ]);
-
-      const zoomLevel = 16;
-      bikeMap.flyTo(playbackDataset.origin, zoomLevel, { animate: true });
-
       $("#progress").hide();
       $("#playback").show();
-      let stats = $("#stats");
-      const stamp = playbackDataset.frames[0].timestamp;
-      stats.text("📅 {0} 🕗 {1}".format(toDateUTC(stamp), toTimeUTC(stamp)));
-      stats.css("display", "block");
 
       let slider = $("#history");
       if (playbackDataset.timeRange) {
@@ -255,22 +240,60 @@
           "max": playbackDataset.frames.length - 1,
           "value": 0
         });
+
+        (new L.marker(playbackDataset.origin, { icon: markers.origin })).addTo(bikeMap);
+        //(new L.marker(L.latLng(...playbackDataset.snakeBounds.max), { icon: markers[2] })).addTo(bikeMap);
+
+        const snakeBounds = new L.latLngBounds([
+          playbackDataset.snakeBounds.min,
+          playbackDataset.snakeBounds.max
+        ]);
+
+        const zoomLevel = 16;
+        bikeMap.flyTo(playbackDataset.origin, zoomLevel, { animate: true });
+
+        let stats = $("#stats");
+        const stamp = playbackDataset.frames[0].timestamp;
+        stats.text("📅 {0} 🕗 {1}".format(toDateUTC(stamp), toTimeUTC(stamp)));
+        stats.css("display", "block");
       }
       slider.show();
     }
 
     function drawTracks(tracks, maxTimestamp) {
+      const heads = [];
+      let isLastFrame = true;
       for (let t = 0; t < tracks.length; t++) {
-        if (tracks[t].polyline)
-          bikeMap.removeLayer(tracks[t].polyline);
-        const coords = [];
-        for (const coord of tracks[t]) {
-          if (coord.stamp > maxTimestamp)
-            break;
-          coords.push(L.latLng(coord.lat, coord.lng));
+        if (tracks[t].shadow) {
+          bikeMap.removeLayer(tracks[t].shadow);
+          bikeMap.removeLayer(tracks[t].head);
         }
-        tracks[t].polyline = L.polyline(coords, {
-          color: `hsl(${t},100%,50%)`,
+        const coords = [];
+        let isContinuing = false;
+        for (let i = 0; i < tracks[t].length; i++) {
+          if (tracks[t][i].stamp > maxTimestamp) {
+            isLastFrame = false;
+            isContinuing = true;
+            break;
+          }
+          coords.push(L.latLng(tracks[t][i].lat, tracks[t][i].lng));
+        }
+
+        if (isContinuing) {
+          heads.push(coords.splice(-2, 2));
+        } else {
+          heads.push([]);
+        }
+
+        tracks[t].shadow = L.polyline(coords, {
+          color: `rgb(100, 100, 100)`,
+          opacity: 0.1
+        }).addTo(bikeMap);
+      }
+
+      for (let t = 0; t < tracks.length; t++) {
+        tracks[t].head = L.polyline(heads[t], {
+          color: isLastFrame ? `rgb(100, 100, 100)` : `hsl(${t},100%,50%)`,
           opacity: 0.75
         }).addTo(bikeMap);
       }
