@@ -88,9 +88,12 @@
 
     const NewStylePostProcess = new CriticalSnake.PostProcessor({
       coordFilter: getCoordFilter("Berlin"),
-      splitTrack: {
-        gapDuration: 300, // seconds
-        gapDistance: 1000 // meters
+      trackRestrictions: {
+        minDataPoints: 8,
+        minTotalDuration: 300,  // seconds
+        minTotalDistance: 1000, // meters
+        maxGapDuration: 300,    // seconds
+        maxGapDistance: 1000,   // meters
       }
     });
 

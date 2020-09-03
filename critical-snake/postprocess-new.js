@@ -30,10 +30,10 @@ CriticalSnake.PostProcessor = function(options) {
   }
 
   function splitTrack(vector) {
-    if (vector.duration > options.splitTrack.gapDuration) {
+    if (vector.duration > options.trackRestrictions.maxGapDuration) {
       return true;
     }
-    if (vector.distance > options.splitTrack.gapDistance) {
+    if (vector.distance > options.trackRestrictions.maxGapDistance) {
       return true;
     }
     return false;
@@ -127,6 +127,16 @@ CriticalSnake.PostProcessor = function(options) {
     }
   }
 
+  function totalDistance(track) {
+    const addDists = (sum, t) => t.vector ? sum + t.vector.distance : sum;
+    return track.reduce(addDists, 0);
+  }
+
+  function totalTime(track) {
+    const addDurations = (sum, t) => t.vector ? sum + t.vector.duration : sum;
+    return track.reduce(addDurations, 0);
+  }
+
   this.run = (dataset) => {
 
     // Dataset pass: populate tracks
@@ -163,6 +173,16 @@ CriticalSnake.PostProcessor = function(options) {
         }
       }
     }
+
+    self.tracks = self.tracks.filter(track => {
+      if (track.length < options.trackRestrictions.minDataPoints)
+        return false;
+      if (totalDistance(track) < options.trackRestrictions.minTotalDistance)
+        return false;
+      if (totalTime(track) < options.trackRestrictions.minTotalDuration)
+        return false;
+      return true;
+    });
 
     return {
       origin: [52.5, 13.4],
