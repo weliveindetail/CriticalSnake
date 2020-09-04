@@ -34,7 +34,6 @@
   <script src="critical-snake/common.js"></script>
   <script src="critical-snake/marker.js"></script>
   <script src="critical-snake/bikemap.js"></script>
-  <script src="critical-snake/postprocess.js"></script>
   <script src="critical-snake/postprocess-new.js"></script>
   <script src="critical-snake/utils.js"></script>
 
@@ -92,21 +91,46 @@
       }
     });
 
+    const square = [];
+    square.push(L.latLng(52.500, 13.400));
+    square.push(L.latLng(52.501, 13.400));
+    square.push(L.latLng(52.501, 13.402));
+    square.push(L.latLng(52.500, 13.402));
+    square.push(L.latLng(52.500, 13.400));
+    L.polyline(square, { color: "rgb(255, 0, 0)" }).addTo(bikeMap);
+
+    const minute = 60 * 1000;
+    const kilometer = 1000;
+
     const PostProcessor = new CriticalSnake.PostProcessor({
       coordFilter: getCoordFilter("Berlin"),
       trackRestrictions: {
         minDataPoints: 8,
-        minTotalDuration: 300,  // seconds
-        minTotalDistance: 1000, // meters
-        maxGapDuration: 300,    // seconds
-        maxGapDistance: 1000,   // meters
-      }
+        minTotalDuration: 5 * minute,
+        minTotalDistance: 1 * kilometer,
+        maxGapDuration: 5 * minute,
+        maxGapDistance: 1 * kilometer,
+      },
+      waiting: {
+        minDuration: 10 * minute,
+        maxDistanceMoved: 0.5 * kilometer,
+      },
+      gathering: {
+        maxPointToPointDistance: 1 * kilometer,
+        windowSize: 10 * minute,
+        windowOverlap: 5 * minute,
+      },
+      route: {
+        maxPointToPointDistance: 0.2 * kilometer,
+        windowSize: 30 * minute,
+        windowOverlap: 10 * minute,
+      },
     });
 
     // ----------------------------------------------------
 
     bikeMap.browseButton.change(function () {
-      // Check selection and set visual indication for the loading progress.
+      // Validate selection and set visual indication for the loading progress.
       bikeMap.browseButton.hide();
       bikeMap.loadingLabel.text("Loading..");
       bikeMap.loadingLabel.show();
@@ -132,16 +156,27 @@
 
     function loadRecording(data) {
       const rawDataSet = JSON.parse(data);
-      const replayDataset = PostProcessor.renderTracks(rawDataSet);
+      const replayBaseData = PostProcessor.renderTracks(rawDataSet);
 
       console.log("Filtered", PostProcessor.filteredDupes, "duplicate data points");
       console.log("Filtered", PostProcessor.filteredOutOfRange, "data points outside area of interest");
 
+      const replayOrigins = PostProcessor.detectGatheringPoints(replayBaseData.dataPoints);
+
+      const replayRoutes = PostProcessor.detectRoutes2(replayBaseData.dataPoints,
+                                                       replayBaseData.tracks,
+                                                       replayOrigins.origins);
+
       bikeMap.historySlider.attr({ min: 0, max: 100 });
       bikeMap.historySlider.val(0);
 
+      console.log(replayBaseData.tracks);
+      console.log(replayBaseData.dataPoints);
+      console.log(replayOrigins.origins);
+      console.log(replayRoutes.circles);
+
       playbackFrameIdx = 0;
-      playbackDataset = replayDataset;
+      playbackDataset = { ...replayBaseData, ...replayOrigins, ...replayRoutes };
       refreshView(playbackFrameIdx);
 
       bikeMap.loadingLabel.hide();
@@ -160,7 +195,7 @@
       const offset = (end - begin) * (frameIdx / 100);
       const d = new Date(begin + offset);
 
-      drawTracks(playbackDataset.tracks, d);
+      drawTracks(playbackDataset, d);
 
       // Adds a leading "0" for single digit values.
       const pad2 = (val) => (val < 10 ? "0" : "") + val;
@@ -174,7 +209,7 @@
     // ----------------------------------------------------
 
     let frameTimer = null;
-    const testFPS = 10;
+    const testFPS = 3;
     function resume() {
       bikeMap.playbackButton.val("||");
       frameTimer = setInterval(() => {
@@ -206,26 +241,29 @@
       return playbackButton.val() != "▶";
     }
 
+    let originMarkers = L.layerGroup([], { pane: "markerPane" });
     let trackHeads = L.layerGroup([], { pane: "markerPane" });
     let trackShadows = L.layerGroup([], { pane: "shadowPane" });
 
-    function drawTracks(tracks, maxTimestamp) {
+    function drawTracks(dataset, maxStamp) {
       bikeMap.removeLayer(trackHeads);
+      bikeMap.removeLayer(originMarkers);
       bikeMap.removeLayer(trackShadows);
 
       trackHeads.clearLayers();
+      originMarkers.clearLayers();
       trackShadows.clearLayers();
 
-      for (let t = 0; t < tracks.length; t++) {
-        const coords = tracks[t].filter(frame => frame.stamp <= maxTimestamp);
-        const isLastFrame = (coords.length == tracks[t].length);
-
-        if (coords.length > 3 && !isLastFrame)
-          trackHeads.addLayer(
-            L.polyline(coords.splice(-2, 2), {
-              color: `hsl(${t},100%,50%)`,
-              opacity: 0.75
-            }));
+      for (let t = 0; t < dataset.tracks.length; t++) {
+        const coords = dataset.tracks[t].filter(frame => frame.first_stamp <= maxStamp);
+        //const isLastFrame = (coords.length == dataset.tracks[t].length);
+        //
+        //if (coords.length > 3 && !isLastFrame)
+        //  trackHeads.addLayer(
+        //    L.polyline(coords.splice(-2, 2), {
+        //      color: `hsl(${t},100%,50%)`,
+        //      opacity: 0.75
+        //    }));
 
         if (coords.length > 1)
           trackShadows.addLayer(
@@ -235,7 +273,36 @@
             }));
       }
 
+      for (const circle of dataset.circles) {
+        if (circle.first_stamp <= maxStamp && circle.last_stamp >= maxStamp) {
+          trackHeads.addLayer(
+            L.circle(circle.center, {
+              stroke: false,
+              fillColor: `rgb(255, 0, 0)`,
+              fillOpacity: 0.25,
+              radius: 5 * Math.log2(circle.size),
+            }));
+        }
+      }
+
+      const minStamp = new Date(maxStamp.getTime() - 5 * 60 * 1000);
+      const inTime = (s) => s.last_stamp >= minStamp && s.first_stamp <= maxStamp;
+
+      for (let s = 0; s < dataset.origins.length; s++) {
+        if (inTime(dataset.origins[s])) {
+          for (const group of dataset.origins[s].groups) {
+            const op = (sum, coord) => L.latLng(sum.lat + coord.lat, sum.lng + coord.lng);
+            const sum = group.reduce(op, L.latLng(0, 0));
+            const center = L.latLng(sum.lat / group.length, sum.lng / group.length);
+
+            originMarkers.addLayer(
+              L.marker(center, { icon: markers.origin }));
+          }
+        }
+      }
+
       trackShadows.addTo(bikeMap);
+      originMarkers.addTo(bikeMap);
       trackHeads.addTo(bikeMap);
     }
   </script>
