@@ -192,13 +192,7 @@ CriticalSnake.PostProcessor = function(options) {
     }
 
     return {
-      origin: [52.5, 13.4],
-      snakeBounds: initialCoordBounds(),
-      timeRange: [ new Date(minEpoch * 1000), new Date(maxEpoch * 1000)],
-      frames: [{
-        coord: [52.51, 13.41],
-        snake: null
-      }]
+      timeRange: [ new Date(minEpoch * 1000), new Date(maxEpoch * 1000)]
     };
   }; // CriticalSnake.PostProcessor.run()
 

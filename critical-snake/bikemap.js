@@ -6,10 +6,6 @@ function createBikeMap(L, baseLayer, options) {
 
   // Customization points
   bikeMap.createMarker = (loc) => { return L.marker(loc.coord); };
-  bikeMap.onMapZoomed = (bikeMap) => {};
-  bikeMap.on("zoomend", () => {
-    bikeMap.onMapZoomed(bikeMap);
-  });
 
   if (options.showStats) {
     L.Control.StatsView = L.Control.extend({
@@ -25,10 +21,6 @@ function createBikeMap(L, baseLayer, options) {
   }
 
   if (options.showControls) {
-    // Customization points
-    bikeMap.onPlaybackClicked = (DomElement) => {};
-    bikeMap.onSliderMoved = (DomElement) => {};
-
     L.Control.PlaybackCtrls = L.Control.extend({
       onAdd: function(map) {
         let playbackCtrls = L.DomUtil.create('div', 'leaflet-bar');
@@ -65,14 +57,6 @@ function createBikeMap(L, baseLayer, options) {
           map.dragging.enable();
         }, this);
 
-        L.DomEvent.on(playback, 'click', () => {
-          bikeMap.onPlaybackClicked(playback, map);
-        }, this);
-
-        L.DomEvent.on(slider, 'input', () => {
-          bikeMap.onSliderMoved(slider);
-        }, this);
-
         return playbackCtrls;
       },
 
@@ -92,28 +76,34 @@ function createBikeMap(L, baseLayer, options) {
     (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
   }
 
-  bikeMap.participants = [];
-  bikeMap.candidates = [];
-  bikeMap.update = (newLocations) => {
-    bikeMap.participants.forEach(marker => bikeMap.removeLayer(marker));
-    bikeMap.candidates.forEach(marker => bikeMap.removeLayer(marker));
+//  bikeMap.participants = [];
+//  bikeMap.candidates = [];
+//  bikeMap.update = (newLocations) => {
+//    bikeMap.participants.forEach(marker => bikeMap.removeLayer(marker));
+//    bikeMap.candidates.forEach(marker => bikeMap.removeLayer(marker));
+//
+//    let participants = [];
+//    let candidates = [];
+//    for (let key in newLocations) {
+//      const loc = newLocations[key];
+//      const marker = bikeMap.createMarker(loc);
+//      marker.addTo(bikeMap);
+//      if (loc.snake == null)
+//        candidates.push(marker);
+//      else
+//        participants.push(marker);
+//    }
+//
+//    bikeMap.participants = participants;
+//    bikeMap.candidates = candidates;
+//    return participants.length + candidates.length;
+//  }
 
-    let participants = [];
-    let candidates = [];
-    for (let key in newLocations) {
-      const loc = newLocations[key];
-      const marker = bikeMap.createMarker(loc);
-      marker.addTo(bikeMap);
-      if (loc.snake == null)
-        candidates.push(marker);
-      else
-        participants.push(marker);
-    }
-
-    bikeMap.participants = participants;
-    bikeMap.candidates = candidates;
-    return participants.length + candidates.length;
-  }
+  bikeMap.browseButton = $("#browse");
+  bikeMap.loadingLabel = $("#progress");
+  bikeMap.historySlider = $("#history");
+  bikeMap.playbackButton = $("#playback");
+  bikeMap.statsLabel = $("#stats");
 
   return bikeMap;
 }

@@ -68,23 +68,29 @@
 
     let playbackFrameIdx = 0;
     let playbackDataset = null;
-    bikeMap.onPlaybackClicked = (playbackButton) => {
-      if (isRunning(playbackButton)) {
-        pause(playbackButton);
-      } else {
-        resume(playbackButton);
+    bikeMap.playbackButton.click(() => {
+      if (playbackDataset) {
+        if (isRunning(bikeMap.playbackButton)) {
+          pause();
+        } else {
+          resume();
+        }
       }
-    };
+    });
 
-    bikeMap.onSliderMoved = (sliderElement) => {
-      playbackFrameIdx = sliderElement.value;
-      refreshView();
-    };
+    $(document).on("input", bikeMap.historySlider, () => {
+      if (playbackDataset) {
+        playbackFrameIdx = parseInt(bikeMap.historySlider.val());
+        refreshView(playbackFrameIdx);
+      }
+    });
 
-    bikeMap.onMapZoomed = (bikeMap) => {
-      const px = Math.max(1, bikeMap.getZoom() - 10) * 6;
-      markers.updateSize(px);
-    };
+    bikeMap.on("zoomend", () => {
+      if (playbackDataset) {
+        const px = Math.max(1, bikeMap.getZoom() - 10) * 6;
+        markers.updateSize(px);
+      }
+    });
 
     const NewStylePostProcess = new CriticalSnake.PostProcessor({
       coordFilter: getCoordFilter("Berlin"),
@@ -99,165 +105,105 @@
 
     // ----------------------------------------------------
 
-    $("#browse").change(function () {
-      $("#browse").hide();
-      $("#progress").text("Loading..");
-      $("#progress").show();
+    bikeMap.browseButton.change(function () {
+      // Check selection and set visual indication for the loading progress.
+      bikeMap.browseButton.hide();
+      bikeMap.loadingLabel.text("Loading..");
+      bikeMap.loadingLabel.show();
 
       if (this.files.length == 0)
         return;
-
       if (this.files.length > 1)
         console.warn("Can only playback one file at a time:", this.files[0].name);
 
+      // Load and parse the actual file content.
       const reader = new FileReader();
-      if (this.files[0].name.endsWith("test")) {
-        let rawJSONs = [];
-        $(reader).on('load', (event) => {
-          const lines = event.target.result.split("\n");
-          try {
-            for (const line of lines) {
-              rawJSONs.push(JSON.parse(line));
-            }
-          }
-          catch (ex) {
-            if (lines.length == rawJSONs.length + 1) {
-              console.assert(lines[lines.length - 1] == "");
-              console.log("Received", rawJSONs.length, "frames");
-            }
-            else {
-              console.error("JSON parsing failed on frame", rawJSONs.length,
-                            "Can only playback previous ones.");
-            }
-          }
-          playbackDataset = postprocess(rawJSONs, getCoordFilter("Berlin"));
-          runDataSet(playbackDataset);
-        });
-      } else {
-        $(reader).on('load', (event) => {
-          const lines = event.target.result;
-          try {
-            const dataset = JSON.parse(lines);
-            playbackDataset = NewStylePostProcess.run(dataset);
-            console.log("Filtered", NewStylePostProcess.filteredDupes, "duplicate data points");
-            console.log("Filtered", NewStylePostProcess.filteredOutOfRange, "data points outside area of interest");
-
-            drawTracks(NewStylePostProcess.tracks, Date.now());
-            runDataSet(playbackDataset);
-          }
-          catch (ex) {
-            console.error("JSON parsing for file", this.files[0].name,
-                          "failed with", ex);
-          }
-        });
-      }
-
+      $(reader).on('load', (event) => {
+        try {
+          loadRecording(event.target.result);
+        }
+        catch (ex) {
+          console.error("JSON parsing for file", this.files[0].name,
+                        "failed with", ex);
+        }
+      });
       reader.readAsText(this.files[0]);
     });
 
+    function loadRecording(data) {
+      const rawDataSet = JSON.parse(data);
+      const replayDataset = NewStylePostProcess.run(rawDataSet);
+
+      console.log("Filtered", NewStylePostProcess.filteredDupes, "duplicate data points");
+      console.log("Filtered", NewStylePostProcess.filteredOutOfRange, "data points outside area of interest");
+
+      bikeMap.historySlider.attr({ min: 0, max: 100 });
+      bikeMap.historySlider.val(0);
+
+      playbackFrameIdx = 0;
+      playbackDataset = replayDataset;
+      refreshView(playbackFrameIdx);
+
+      bikeMap.loadingLabel.hide();
+      bikeMap.statsLabel.show();
+      bikeMap.historySlider.show();
+      bikeMap.playbackButton.show();
+    }
+
     // ----------------------------------------------------
 
-    let playbackBeginAction = () => {};
-    let playbackEndAction = () => {};
-    function refreshView() {
-      switch (playbackFrameIdx) {
-        case 0:
-          playbackBeginAction();
-          break;
-        case playbackDataset.frames.length:
-          playbackEndAction();
-          return;
-      }
+    function refreshView(frameIdx) {
+      bikeMap.historySlider.val(frameIdx);
 
-      $("#history")[0].value = playbackFrameIdx;
+      const begin = playbackDataset.timeRange[0].getTime();
+      const end = playbackDataset.timeRange[1].getTime();
+      const offset = (end - begin) * (frameIdx / 100);
+      const d = new Date(begin + offset);
 
-      if (NewStylePostProcess.tracks) {
-        const begin = playbackDataset.timeRange[0].getTime();
-        const end = playbackDataset.timeRange[1].getTime();
-        const offset = (end - begin) * (playbackFrameIdx / 100);
+      drawTracks(NewStylePostProcess.tracks, d);
 
-        drawTracks(NewStylePostProcess.tracks, new Date(begin + offset));
-      }
-      else {
-        let frame = playbackDataset.frames[playbackFrameIdx];
-        let trackedBikes = bikeMap.update(frame.locations);
-
-        $("#stats").text("📅 {0} 🕗 {1} 📍🚲 {2}".format(
-          toDateUTC(frame.timestamp), toTimeUTC(frame.timestamp), trackedBikes));
-      }
-
-      playbackFrameIdx += 1;
+      // Adds a leading "0" for single digit values.
+      const pad2 = (val) => (val < 10 ? "0" : "") + val;
+      bikeMap.statsLabel.text(
+        `📅 ${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+        `🕗 ${pad2(d.getHours())}:${pad2(d.getMinutes())} ` +
+        `📍🚲 ???`
+      );
     }
 
     // ----------------------------------------------------
 
     let frameTimer = null;
-    let testFPS = 10;
-    function resume(playbackButton) {
-      playbackButton.value = "||";
-      frameTimer = setInterval(refreshView, 1000 / testFPS);
-      playbackBeginAction = () => {
-        const snakeBounds = new L.latLngBounds([
-          playbackDataset.snakeBounds.min,
-          playbackDataset.snakeBounds.max
-        ]);
-
-        bikeMap.fitBounds(snakeBounds, { animate: true });
-      };
-      playbackEndAction = () => {
-        clearTimeout(frameTimer);
-        $("#playback").attr("value", "▶");
-        playbackFrameIdx = 0;
-      };
+    const testFPS = 10;
+    function resume() {
+      bikeMap.playbackButton.val("||");
+      frameTimer = setInterval(() => {
+        switch (playbackFrameIdx) {
+          case 0:
+            refreshView(playbackFrameIdx);
+            playbackFrameIdx += 1;
+            break;
+          case 100:
+            clearTimeout(frameTimer);
+            refreshView(playbackFrameIdx);
+            bikeMap.playbackButton.val("▶");
+            playbackFrameIdx = 0;
+            break;
+          default:
+            refreshView(playbackFrameIdx);
+            playbackFrameIdx += 1;
+            break;
+        }
+      }, 1000 / testFPS);
     }
 
-    function pause(playbackButton) {
-      playbackButton.value = "▶";
+    function pause() {
+      bikeMap.playbackButton.val("▶");
       clearTimeout(frameTimer);
     }
 
     function isRunning(playbackButton) {
-      return playbackButton.value != "▶";
-    }
-
-    function runDataSet(playbackDataset) {
-      playbackFrameIdx = 0;
-
-      $("#progress").hide();
-      $("#playback").show();
-
-      let slider = $("#history");
-      if (playbackDataset.timeRange) {
-        slider.attr({
-          "min": 0,
-          "max": 100,
-          "value": 0
-        });
-      }
-      else {
-        slider.attr({
-          "min": 0,
-          "max": playbackDataset.frames.length - 1,
-          "value": 0
-        });
-
-        (new L.marker(playbackDataset.origin, { icon: markers.origin })).addTo(bikeMap);
-        //(new L.marker(L.latLng(...playbackDataset.snakeBounds.max), { icon: markers[2] })).addTo(bikeMap);
-
-        const snakeBounds = new L.latLngBounds([
-          playbackDataset.snakeBounds.min,
-          playbackDataset.snakeBounds.max
-        ]);
-
-        const zoomLevel = 16;
-        bikeMap.flyTo(playbackDataset.origin, zoomLevel, { animate: true });
-
-        let stats = $("#stats");
-        const stamp = playbackDataset.frames[0].timestamp;
-        stats.text("📅 {0} 🕗 {1}".format(toDateUTC(stamp), toTimeUTC(stamp)));
-        stats.css("display", "block");
-      }
-      slider.show();
+      return playbackButton.val() != "▶";
     }
 
     function drawTracks(tracks, maxTimestamp) {
