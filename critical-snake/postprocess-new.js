@@ -137,7 +137,13 @@ CriticalSnake.PostProcessor = function(options) {
     return track.reduce(addDurations, 0);
   }
 
-  this.run = (dataset) => {
+  this.renderTracks = (dataset) => {
+    const tracks = [];
+
+    self.indexMap = {};
+    self.nextIndex = 0;
+    self.filteredDupes = 0;
+    self.filteredOutOfRange = 0;
 
     // Dataset pass: populate tracks
     for (const snapshot in dataset) {
@@ -150,31 +156,31 @@ CriticalSnake.PostProcessor = function(options) {
         }
 
         const idx = hashToIdx(participant);
-        if (self.tracks.length <= idx) {
-          self.tracks[idx] = [ dataPoint ];
+        if (tracks.length <= idx) {
+          tracks[idx] = [ dataPoint ];
           continue;
         }
 
-        const latest = back(self.tracks[idx]);
+        const latest = back(tracks[idx]);
         const vector = calculateVector(latest, dataPoint);
 
         if (vector) {
           if (splitTrack(vector)) {
             // Drop the vector and create a new track for this data-point.
             const idx = newIdxForHash(participant);
-            self.tracks[idx] = [ dataPoint ];
+            tracks[idx] = [ dataPoint ];
           }
           else {
             // Add vector to the latest data-point in the track and push the new
             // data-point on top.
             latest.vector = vector;
-            self.tracks[idx].push(dataPoint);
+            tracks[idx].push(dataPoint);
           }
         }
       }
     }
 
-    self.tracks = self.tracks.filter(track => {
+    const relevantTracks = tracks.filter(track => {
       if (track.length < options.trackRestrictions.minDataPoints)
         return false;
       if (totalDistance(track) < options.trackRestrictions.minTotalDistance)
@@ -186,17 +192,17 @@ CriticalSnake.PostProcessor = function(options) {
 
     let minEpoch = 8640000000000;
     let maxEpoch = 0;
-    for (const track of self.tracks) {
+    for (const track of tracks) {
       minEpoch = Math.min(minEpoch, track[0].stamp.getTime() / 1000);
       maxEpoch = Math.max(maxEpoch, back(track).stamp.getTime() / 1000);
     }
 
     return {
-      timeRange: [ new Date(minEpoch * 1000), new Date(maxEpoch * 1000)]
+      tracks: relevantTracks,
+      timeRange: [ new Date(minEpoch * 1000), new Date(maxEpoch * 1000)],
     };
-  }; // CriticalSnake.PostProcessor.run()
+  }; // CriticalSnake.PostProcessor.renderTracks()
 
-  this.tracks = [];
   this.indexMap = {};
   this.nextIndex = 0;
   this.filteredDupes = 0;

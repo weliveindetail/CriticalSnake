@@ -92,7 +92,7 @@
       }
     });
 
-    const NewStylePostProcess = new CriticalSnake.PostProcessor({
+    const PostProcessor = new CriticalSnake.PostProcessor({
       coordFilter: getCoordFilter("Berlin"),
       trackRestrictions: {
         minDataPoints: 8,
@@ -132,10 +132,10 @@
 
     function loadRecording(data) {
       const rawDataSet = JSON.parse(data);
-      const replayDataset = NewStylePostProcess.run(rawDataSet);
+      const replayDataset = PostProcessor.renderTracks(rawDataSet);
 
-      console.log("Filtered", NewStylePostProcess.filteredDupes, "duplicate data points");
-      console.log("Filtered", NewStylePostProcess.filteredOutOfRange, "data points outside area of interest");
+      console.log("Filtered", PostProcessor.filteredDupes, "duplicate data points");
+      console.log("Filtered", PostProcessor.filteredOutOfRange, "data points outside area of interest");
 
       bikeMap.historySlider.attr({ min: 0, max: 100 });
       bikeMap.historySlider.val(0);
@@ -160,7 +160,7 @@
       const offset = (end - begin) * (frameIdx / 100);
       const d = new Date(begin + offset);
 
-      drawTracks(NewStylePostProcess.tracks, d);
+      drawTracks(playbackDataset.tracks, d);
 
       // Adds a leading "0" for single digit values.
       const pad2 = (val) => (val < 10 ? "0" : "") + val;
