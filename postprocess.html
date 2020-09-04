@@ -206,43 +206,37 @@
       return playbackButton.val() != "▶";
     }
 
+    let trackHeads = L.layerGroup([], { pane: "markerPane" });
+    let trackShadows = L.layerGroup([], { pane: "shadowPane" });
+
     function drawTracks(tracks, maxTimestamp) {
-      const heads = [];
-      let isLastFrame = true;
-      for (let t = 0; t < tracks.length; t++) {
-        if (tracks[t].shadow) {
-          bikeMap.removeLayer(tracks[t].shadow);
-          bikeMap.removeLayer(tracks[t].head);
-        }
-        const coords = [];
-        let isContinuing = false;
-        for (let i = 0; i < tracks[t].length; i++) {
-          if (tracks[t][i].stamp > maxTimestamp) {
-            isLastFrame = false;
-            isContinuing = true;
-            break;
-          }
-          coords.push(L.latLng(tracks[t][i].lat, tracks[t][i].lng));
-        }
+      bikeMap.removeLayer(trackHeads);
+      bikeMap.removeLayer(trackShadows);
 
-        if (isContinuing) {
-          heads.push(coords.splice(-2, 2));
-        } else {
-          heads.push([]);
-        }
-
-        tracks[t].shadow = L.polyline(coords, {
-          color: `rgb(100, 100, 100)`,
-          opacity: 0.1
-        }).addTo(bikeMap);
-      }
+      trackHeads.clearLayers();
+      trackShadows.clearLayers();
 
       for (let t = 0; t < tracks.length; t++) {
-        tracks[t].head = L.polyline(heads[t], {
-          color: isLastFrame ? `rgb(100, 100, 100)` : `hsl(${t},100%,50%)`,
-          opacity: 0.75
-        }).addTo(bikeMap);
+        const coords = tracks[t].filter(frame => frame.stamp <= maxTimestamp);
+        const isLastFrame = (coords.length == tracks[t].length);
+
+        if (coords.length > 3 && !isLastFrame)
+          trackHeads.addLayer(
+            L.polyline(coords.splice(-2, 2), {
+              color: `hsl(${t},100%,50%)`,
+              opacity: 0.75
+            }));
+
+        if (coords.length > 1)
+          trackShadows.addLayer(
+            L.polyline(coords, {
+              color: `rgb(100, 100, 100)`,
+              opacity: 0.1
+            }));
       }
+
+      trackShadows.addTo(bikeMap);
+      trackHeads.addTo(bikeMap);
     }
   </script>
 </body>
