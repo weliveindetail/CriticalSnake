@@ -87,13 +87,6 @@ CriticalSnake.PostProcessor = function(options) {
     return back(self.indexMap[hash]);
   }
 
-  function directionAngleRadians(c1, c2) {
-    const norm = (lat) => Math.tan((lat / 2) + (Math.PI / 4));
-    const Δφ = Math.log(norm(c2.lat) / norm(c1.lat));
-    const Δlon = c1.lng - c2.lng;
-    return (Math.atan2(Δlon, Δφ) + 2 * Math.PI) % (2 * Math.PI);
-  }
-
   function haversineMeters(c1, c2) {
     const R = 6371e3; // metres
     const φ1 = c1.lat * Math.PI / 180; // φ, λ in radians
@@ -109,6 +102,18 @@ CriticalSnake.PostProcessor = function(options) {
     return R * c;
   }
 
+  function leafletToGeodesy(latLng) {
+    return new LatLon(latLng.lat, latLng.lng);
+  }
+
+  function geodesyDistance(c1, c2) {
+    return leafletToGeodesy(c1).distanceTo(leafletToGeodesy(c2));
+  }
+
+  function geodesyBearing(c1, c2) {
+    return leafletToGeodesy(c1).bearingTo(leafletToGeodesy(c2));
+  }
+
   // The vector is the transition info between the last and the current
   // data-point in the track.
   function calculateVector(latest, next) {
@@ -118,46 +123,18 @@ CriticalSnake.PostProcessor = function(options) {
       return null;
     }
 
-    const radians = directionAngleRadians(latest, next);
-    if (radians < 0 || radians > 2 * Math.PI || isNaN(radians)) {
-      console.warn("Dropping data-point due to invalid direction",
-                  radians, " (radians) from", latest, "to", next);
-      return null;
-    }
-
-    const meters = haversineMeters(latest, next);
-    if (meters <= 0) {
-      console.warn("Dropping data-point due to invalid distance",
-                  meters, "(meters) from", latest, "to", next);
-      return null;
-    }
-
-    const ms = next.first_stamp - latest.last_stamp;
-    if (ms < 0) {
-      console.warn("Dropping data-point due to invalid duration",
-                   ms * 1000, " (seconds) from", latest, "to", next);
-      return null;
-    }
-
     return {
-      direction: radians,
-      distance: meters,
-      duration: ms
+      direction: geodesyBearing(latest, next),
+      distance: geodesyDistance(latest, next),
+      duration: next.first_stamp - latest.last_stamp
     }
   }
 
   function isDuplicate(latest, next) {
-    if (latest.last_stamp == next.first_stamp) {
-      self.filteredDupes += 1;
+    if (latest.last_stamp == next.first_stamp)
       return true;
-    }
-
-    // TODO: We should record a min/max timestamp here.
-    if (latest.lat == next.lat && latest.lng == next.lng) {
-      self.filteredDupes += 1;
+    if (latest.lat == next.lat && latest.lng == next.lng)
       return true;
-    }
-
     return false;
   }
 
@@ -199,6 +176,7 @@ CriticalSnake.PostProcessor = function(options) {
         if (isDuplicate(latest, dataPoint)) {
           // Extend the duration of ths latest data-point.
           latest.last_stamp = dataPoint.last_stamp;
+          self.filteredDupes += 1;
           continue;
         }
 
@@ -233,8 +211,15 @@ CriticalSnake.PostProcessor = function(options) {
     // has a vector and knows its predecessor.
     const dataPoints = [];
     for (const track of relevantTracks) {
-      for (let i = 1; i < track.length - 1; i++) {
-        track[i].pred = track[i - 1];
+      // All data-points have a vector except the last of each track. Leave
+      // that one out for convencience. We can reach it via the vector of its
+      // predecessor.
+      for (let i = 0; i < track.length - 1; i++) {
+        const dataPoint = track[i];
+        dataPoint.track = track;
+        dataPoint.trackIdx = i;
+        dataPoint.circles = [];
+        dataPoint.snake = null;
         dataPoints.push(track[i]);
       }
     }
@@ -309,15 +294,44 @@ CriticalSnake.PostProcessor = function(options) {
 
   function sumDistanceMoved(destination, duration) {
     const dataPointsToDestination = [];
-    for (let it = destination.pred; it; it = it.pred) {
-      if (destination.first_stamp - it.last_stamp > duration) {
+    for (let i = destination.trackIdx; i >= 0; i--) {
+      const dataPoint = destination.track[i];
+      if (destination.first_stamp - dataPoint.last_stamp > duration) {
         return totalDistance(dataPointsToDestination);
       } else {
-        dataPointsToDestination.push(it);
+        dataPointsToDestination.push(dataPoint);
       }
     }
     return NaN;
   };
+
+  function averageLatLng(dataPoints, indexes) {
+    indexes = indexes || Array.from(dataPoints.keys());
+    const accLat = (sum, x) => sum + dataPoints[x].lat;
+    const accLng = (sum, x) => sum + dataPoints[x].lng;
+    const centerLat = indexes.reduce(accLat, 0) / indexes.length;
+    const centerLng = indexes.reduce(accLng, 0) / indexes.length;
+    return L.latLng(centerLat, centerLng);
+  }
+
+
+  function minFirstStamp(dataPoints, indexes) {
+    indexes = indexes || Array.from(dataPoints.keys());
+    const globalMaxStamp = 8640000000000;
+
+    const stamp = (i) => dataPoints[i].first_stamp.getTime();
+    const minimize = (min, i) => Math.min(min, stamp(i));
+    return new Date(indexes.reduce(minimize, globalMaxStamp));
+  }
+
+  function maxLastStamp(dataPoints, indexes) {
+    indexes = indexes || Array.from(dataPoints.keys());
+    const globalMinStamp = 0;
+
+    const stamp = (i) => dataPoints[i].last_stamp.getTime();
+    const maximize = (max, i) => Math.max(max, stamp(i));
+    return new Date(indexes.reduce(maximize, globalMinStamp));
+  }
 
   this.detectGatheringPoints = (dataPoints) => {
     for (const dataPoint of dataPoints) {
@@ -346,47 +360,49 @@ CriticalSnake.PostProcessor = function(options) {
       const groupsInWindow = [];
       for (let a = range.min; a <= range.max; a++) {
         if (dataPoints[a].waiting) {
-          const waitingGroup = new Set();
-          waitingGroup.add(a);
-
+          const waitingGroup = [ a ];
           for (let b = a + 1; b <= range.max; b++) {
             if (dataPoints[b].waiting)
               if (haversineMeters(dataPoints[a], dataPoints[b]) < maxDist)
-                waitingGroup.add(b);
+                waitingGroup.push(b);
           }
 
-          if (waitingGroup.size > 10)
+          if (waitingGroup.length > 10)
             groupsInWindow.push(waitingGroup);
         }
       }
 
       if (groupsInWindow.length > 0) {
-        // Merge groups with common indexes
-        const emptySet = new Set();
+        // Merge groups in close proximity
+        const latLngs = groupsInWindow.map(group => averageLatLng(dataPoints, group));
+
         for (let k = 0; k < groupsInWindow.length; k++) {
           for (let s = k + 1; s < groupsInWindow.length; s++) {
-            if (groupsInWindow[k].overlap(groupsInWindow[s])) {
-              groupsInWindow[k].merge(groupsInWindow[s]);
-              groupsInWindow[s] = emptySet;
+            if (latLngs[k].distanceTo(latLngs[s]) < 1000) {
+              groupsInWindow[s] = [...groupsInWindow[k], ...groupsInWindow[s]];
+              groupsInWindow[k] = [];
+              latLngs[s] = averageLatLng(dataPoints, groupsInWindow[s]);
+              latLngs[k] = L.latLng(0, 0);
             }
           }
         }
 
+        const remainingLatLngs = latLngs.filter(x => x.lat != 0 || x.lng != 0);
+        //if (remainingLatLngs.length > 1) {
+        //  console.log("remainingLatLngs:", remainingLatLngs,
+        //              "groupsInWindow:", groupsInWindow.filter(x => x.length > 0));
+        //}
+
         allWaitingGroups.push({
           first_stamp: dataPoints[range.min].first_stamp,
           last_stamp: dataPoints[range.max].last_stamp,
-          indexSets: groupsInWindow.filter(group => group.size > 0),
+          latLngs: remainingLatLngs,
         });
       }
     }
 
     return {
-      origins: allWaitingGroups.map(entry => {
-        entry.groups = entry.indexSets.map(set => {
-          return Array.from(set).map(i => dataPoints[i]);
-        });
-        return entry;
-      })
+      origins: allWaitingGroups
     };
   }; // CriticalSnake.PostProcessor.detectGatheringPoints()
 
@@ -405,8 +421,8 @@ CriticalSnake.PostProcessor = function(options) {
 
     let allGroups = [];
     const maxDist = options.route.maxPointToPointDistance;
-    const π_4 = Math.PI / 4;
-    const π_8 = Math.PI / 8;
+    const π_4 = 45; //Math.PI / 4;
+    const π_8 = 22.5; //Math.PI / 8;
 
     for (const range = new SlidingWindow(config); !range.empty(); range.advance()) {
       // 16 segments of the circle: 0, π/8, π/4, 3π/8, π/2, ...
@@ -480,104 +496,472 @@ CriticalSnake.PostProcessor = function(options) {
     };
   }; // CriticalSnake.PostProcessor.detectRoutes()
 
-  function averageLatLng(matches, dataPoints) {
-    const accLat = (sum, x) => sum + dataPoints[x].lat;
-    const accLng = (sum, x) => sum + dataPoints[x].lng;
-    const centerLat = matches.reduce(accLat, 0) / matches.length;
-    const centerLng = matches.reduce(accLng, 0) / matches.length;
-    return L.latLng(centerLat, centerLng);
-  }
 
-  function averageDirectionWithWrap(matches, dataPoints) {
+
+  function averageDirectionWithWrap(dataPoints, indexes) {
+    indexes = indexes || Array.from(dataPoints.keys());
+
     const dir = (x) => dataPoints[x].vector.direction;
-    const behindWrap = matches.filter(x => dir(x) < Math.PI / 4);
-    const beforeWrap = matches.filter(x => dir(x) > Math.PI * 7 / 4);
+    const behindWrap = indexes.filter(x => dir(x) < 45);
+    const beforeWrap = indexes.filter(x => dir(x) > 315);
 
     const accDir = (sum, x) => sum + dir(x);
-    const straightSum = matches.reduce(accDir, 0);
+    const straightSum = indexes.reduce(accDir, 0);
 
     if (beforeWrap.length == 0 || behindWrap.length == 0) {
-      return straightSum / matches.length;
+      return straightSum / indexes.length;
     } else {
       // Account for wrap-around from 2Pi to 0 angles: Add difference for all
       // values behind it and apply a modulo for cases where we end up with a
       // result above 2Pi.
-      const sum = straightSum + behindWrap.length * 2 * Math.PI;
-      return (sum / matches.length) % (2 * Math.PI);
+      const sum = straightSum + behindWrap.length * 360;
+      return (sum / indexes.length) % 360;
     }
   }
 
-  this.detectRoutes2 = (dataPoints, tracks, origins) => {
-    const latIndex = [];
-    const lngIndex = [];
-    const timeIndex = [];
+  function interpolateLinear(c1, c2, dist) {
+    const p1 = leafletToGeodesy(c1);
+    const p2 = leafletToGeodesy(c2);
+    const requestedSamples = Math.floor(p1.distanceTo(p2) / dist);
+    const points = Array.from(Array(Math.max(2, requestedSamples)));
+    const fractionIncr = 1 / (points.length - 1);
+    const stampBase = c1.first_stamp.getTime();
+    const stampIncr = (c2.last_stamp.getTime() - stampBase) / (points.length - 1);
 
-    for (let i = 0; i < dataPoints.length; i++) {
-      latIndex.push({ lat: dataPoints[i].lat, idx: i });
-      lngIndex.push({ lng: dataPoints[i].lng, idx: i });
-      timeIndex.push({ time: dataPoints[i].first_stamp.getTime(), idx: i });
+    for (let i = 0, f = 0, s = stampBase; i < points.length; i++) {
+      const geodesyLatLon = p1.intermediatePointTo(p2, f);
+      points[i] = {
+        lat: geodesyLatLon.lat,
+        lng: geodesyLatLon.lon,
+        first_stamp: new Date(s),
+        last_stamp: new Date(s),
+        vector: {
+          direction: c1.vector.direction
+        }
+      };
+      f += fractionIncr;
+      s += stampIncr;
     }
 
-    const compareLat = (a, b) => a.lat - b.lat;
-    const compareLng = (a, b) => a.lng - b.lng;
-    const compareTime = (a, b) => a.time - b.time;
-    const compareDir = (a, b) => {
-      const diff = a.vector.direction - b.vector.direction;
-      return (diff + 2 * Math.PI) % 2 * Math.PI;
-    };
+    return points;
+  }
 
-    latIndex.sort(compareLat);
-    lngIndex.sort(compareLng);
-    timeIndex.sort(compareTime);
+  function ConvexEnvelopeSearch(data, searchFn) {
+    const indexOrder = (a, b) => a.value - b.value;
+    const dimensions = [];
 
-    const circles = [];
+    this.addDimension = function(config) {
+      const entryForIndex = (item, i) => ({
+        value: config.value(item),
+        key: i
+      });
+      const entryForSearch = (item, tolerance) => ({
+        value: config.value(item) + tolerance
+      });
+      dimensions.push({
+        index: data.map(entryForIndex).sort(indexOrder),
+        lowerBound: (item) => entryForSearch(item, config.lowerBoundTolerance),
+        upperBound: (item) => entryForSearch(item, config.upperBoundTolerance),
+      });
+    }
 
-    const findNeighbors = (p, diffLat, diffLng, diffBefore, diffAfter) => {
-      // Find range limits
-      const latIdxMin = binarySearch(latIndex, { lat: p.lat - diffLat }, compareLat);
-      const latIdxMax = binarySearch(latIndex, { lat: p.lat + diffLat }, compareLat);
-      const lngIdxMin = binarySearch(lngIndex, { lng: p.lng - diffLng }, compareLng);
-      const lngIdxMax = binarySearch(lngIndex, { lng: p.lng + diffLng }, compareLng);
-      const timeIdxMin = binarySearch(timeIndex, { time: p.first_stamp.getTime() + diffBefore }, compareTime);
-      const timeIdxMax = binarySearch(timeIndex, { time: p.first_stamp.getTime() + diffAfter }, compareTime);
+    this.itemsInEnvelope = function(item) {
+      const lowerBound = d => searchFn(d.index, d.lowerBound(item), indexOrder);
+      const upperBound = d => searchFn(d.index, d.upperBound(item), indexOrder);
 
-      // Collect indexes that are in all ranges
-      const latRange = new Set(latIndex.slice(latIdxMin, latIdxMax + 1).map(x => x.idx));
-      const lngRange = new Set(lngIndex.slice(lngIdxMin, lngIdxMax + 1).map(x => x.idx));
+      const keySets = [];
+      for (let d = 1; d < dimensions.length; d++) {
+        const dim = dimensions[d];
+        const first = lowerBound(dim);
+        const last = upperBound(dim);
+        keySets.push(new Set(dim.index.slice(first, last + 1)
+                                      .map(entry => entry.key)));
+      }
+
+      const inAllKeySets = (key) => {
+        for (const keySet of keySets) {
+          if (!keySet.has(key))
+            return false;
+        }
+        return true;
+      };
+
+      const primary = dimensions[0];
+      const first = lowerBound(primary);
+      const last = upperBound(primary);
 
       const matches = [];
-      for (let t = timeIdxMin; t <= timeIdxMax; t++) {
-        const idx = timeIndex[t].idx;
-        if (compareDir(p, dataPoints[idx]) < Math.PI / 4 && latRange.has(idx) && lngRange.has(idx)) {
-          matches.push(idx);
+      for (let i = first; i <= last; i++) {
+        if (inAllKeySets(primary.index[i].key)) {
+          matches.push(primary.index[i].key);
         }
       }
 
-      if (matches.length > 20) {
-        circles.push({
-          first_stamp: dataPoints[matches[0]].first_stamp,
-          last_stamp: dataPoints[matches[matches.length - 1]].last_stamp,
-          size: matches.length,
-          center: averageLatLng(matches, dataPoints),
-          direction: averageDirectionWithWrap(matches, dataPoints),
-        });
-      }
-
       return matches;
-    };
-
-    const minute = 60 * 1000;
-    let neighbors = 0;
-    for (let i = 0; i < dataPoints.length; i++) {
-      const idxs = findNeighbors(dataPoints[i], 0.001, 0.002, -5 * minute, 10 * minute);
-      dataPoints[i].neighbors = idxs;
-      neighbors += idxs.length;
     }
 
-    console.log(neighbors);
+    return this;
+  }
+
+  this.detectRoutes2 = (dataPoints, tracks, origins) => {
+    const pointsInTime = ConvexEnvelopeSearch(dataPoints, binarySearch);
+
+    const minute = 60 * 1000;
+
+    pointsInTime.addDimension({
+      lowerBoundTolerance: -5 * minute,
+      upperBoundTolerance: 10 * minute,
+      value: (item) => item.first_stamp.getTime(),
+    });
+    pointsInTime.addDimension({
+      lowerBoundTolerance: -0.001,
+      upperBoundTolerance: 0.001,
+      value: (item) => item.lat,
+    });
+    pointsInTime.addDimension({
+      lowerBoundTolerance: -0.002,
+      upperBoundTolerance: 0.002,
+      value: (item) => item.lng,
+    });
+
+    const dir = (idx) => dataPoints[idx].vector.direction;
+    const dirDiff = (a, b) => (dir(a) - dir(b) + 360) % 360;
+
+    const timeBegin = Date.now();
+    const circles = [];
+    for (let i = 0; i < dataPoints.length - 1; i++) {
+      if (dataPoints[i].circles.length == 0) {
+        const curr = dataPoints[i];
+        const next = dataPoints[i].track[dataPoints[i].trackIdx + 1];
+
+        const samplePoints = interpolateLinear(curr, next, 100);
+        for (const samplePoint of samplePoints.slice(0, -1)) {
+          const undirectedMatches = pointsInTime.itemsInEnvelope(samplePoint);
+          const matches = undirectedMatches.filter(m => dirDiff(i, m) < 45);
+          if (matches.length > 5) {
+            const latLng = averageLatLng(dataPoints, matches);
+            const circle = {
+              first_stamp: minFirstStamp(dataPoints, matches),
+              last_stamp: maxLastStamp(dataPoints, matches),
+              dataPointIdxs: matches,
+              lat: latLng.lat,
+              lng: latLng.lng,
+              vector: {
+                direction: averageDirectionWithWrap(dataPoints, matches),
+              },
+              pathsTo: {},
+              id: circles.length,
+            }
+            circles.push(circle);
+            for (const idx of matches) {
+              dataPoints[idx].circles.push(circle.id);
+            }
+          }
+        }
+      }
+    }
+    const timeEnd = Date.now();
+    console.log("Populating circles took:", (timeEnd - timeBegin), "ms");
+
+
+
+    //const leveledScalar = (avg, num, val) => (num * avg + val) / (num + 1);
+    //const leveledStamp = (avg, num, val) => {
+    //  return new Date((num * avg.getTime() + val.getTime()) / (num + 1));
+    //};
+
+    //        for (const dataPointIdx of entry.matches) {
+    //          // Bake existing circles if direction is similar
+    //          let circlesBaked = 0;
+    //          for (const cc of dataPoints[dataPointIdx].circles.map(id => circles[id])) {
+    //            if (cfg1.compareDir(sp, cc) < 45) {
+    //              // Continuously balance the circle's coordinates.
+    //              const n = cc.points.length;
+    //              cc.lat = leveledScalar(cc.lat, n, sp.lat);
+    //              cc.lng = leveledScalar(cc.lng, n, sp.lng);
+    //              cc.first_stamp = leveledStamp(cc.first_stamp, n, sp.first_stamp);
+    //              cc.last_stamp = leveledStamp(cc.last_stamp, n, sp.last_stamp);
+    //
+    //              // The sampling-point has contributed to this circle.
+    //              cc.points.push(sp);
+    //              circlesBaked += 1;
+    //
+    //              // Account for the wrap-around of the angle when balancing the
+    //              // direction.
+    //              const d = (p) => p.vector.direction;
+    //              const straightSum = n * d(cc) + d(sp);
+    //              if (d(sp) < 45 && d(cc) > 315) {
+    //                cc.vector.direction = ((straightSum + 360) / (n + 1)) % 360;
+    //              } else if (d(sp) > 315 && d(cc) < 45) {
+    //                cc.vector.direction = ((straightSum + n * 360) / (n + 1)) % 360;
+    //              } else {
+    //                cc.vector.direction = straightSum / (n + 1);
+    //              }
+    //            }
+    //          }
+    //
+    //          if (circlesBaked == 0) {
+    //            remainingMatches.push(dataPointIdx);
+    //          }
+    //        }
+
+
+
+    //        // Create new circles for matched data-points that didn't contribute to
+    //        // any existing circles.
+    //        for (const dataPointIdx of remainingMatches) {
+    //          const rp = dataPoints[dataPointIdx];
+    //          const circle = {
+    //            first_stamp: new Date(Math.min(sp.first_stamp.getTime(), rp.first_stamp.getTime())),
+    //            last_stamp: new Date(Math.max(sp.last_stamp.getTime(), rp.last_stamp.getTime())),
+    //            points: [sp, rp],
+    //            lat: (sp.lat + rp.lat) / 2,
+    //            lng: (sp.lng + rp.lng) / 2,
+    //            vector: {
+    //              direction: averageDirectionWithWrap([sp, rp]),
+    //            },
+    //            pathsTo: {},
+    //            id: circles.length,
+    //          }
+    //          rp.circles.push(circle.id);
+    //          sp.circles.push(circle.id);
+    //          circles.push(circle);
+    //        }
+
+//    const stampMax = 8640000000000;
+//    const stampMin = 0;
+//    const mergeCircles = (cs) => {
+//      return {
+//        first_stamp: cs.reduce((res, elem) => new Date(Math.min(res, elem.first_stamp.getTime())), stampMax),
+//        last_stamp: cs.reduce((res, elem) => new Date(Math.max(res, elem.last_stamp.getTime())), stampMin),
+//        dataPointIdxs: cs.reduce((all, elem) => [...all, ...elem.dataPointIdxs], []),
+//        lat: cs.reduce((sum, elem) => sum + elem.lat, 0) / cs.length,
+//        lng: cs.reduce((sum, elem) => sum + elem.lng, 0) / cs.length,
+//        vector: {
+//          direction: averageDirectionWithWrap(Object.keys(cs), cs),
+//        },
+//      };
+//    };
+//
+//    for (const ids of circleIdsByDataPointIdx.filter(ids => ids.length > 1)) {
+//      circles[ids[0]] = mergeCircles(ids.map(id => circles[id]));
+//      for (let i = 1; i < ids; i++) {
+//        circles[ids[i]] = null;
+//      }
+//    }
+
+    //    // Data-point didn't make it into any circle.
+    //    dataPoints[i].circle = null;
+    //  } else {
+    //    // Merge 
+    //    for (let c = 1; c < circlesByDataPointIdx[i].length; c++) {
+    //      //
+    //    }
+    //  }
+    //}
+
+
+    // Turn circles into a directed graph connected by track segments
+//    let abortCount = 0;
+//    for (const track of tracks) {
+//      for (let t = 0; t < track.length - 1; t++) {
+//        const dataPoint = track[t];
+//        if (dataPoint.circles.length > 0) {
+//          const min_i = Math.max(0, t - 5);
+//
+//          //if (dataPoint.circles.length > 50) {
+//          //  console.log("Data-point", dataPoint, "is in", dataPoint.circles.length,
+//          //              "circles:", dataPoint.circles.map(id => circles[id]));
+//          //  abortCount += 1;
+//          //  if (abortCount > 20) {
+//          //    throw new Error("aborting..");
+//          //  }
+//          //}
+//
+//          // Follow the track backwards in history. Each circle we see is a
+//          // predecessor of each circle the current data-point matched with.
+//          for (let i = t - 1; i >= min_i; i--) {
+//            const segment = track.slice(i, t);
+//            for (const circleFrom of track[i].circles.map(id => circles[id])) {
+//              for (const circleIdTo of dataPoint.circles) {
+//                if (circleFrom.pathsTo.hasOwnProperty(circleIdTo)) {
+//                  circleFrom.pathsTo[circleIdTo].push(segment);
+//                }
+//                else {
+//                  circleFrom.pathsTo[circleIdTo] = [ segment ];
+//                }
+//              }
+//            }
+//          }
+//        }
+//      }
+//    }
+
+    const snakeOrigins = [];
+    const startTime = 1598638200000; // 20:10
+    const atStartTime = (stamp) => {
+      return stamp.first_stamp.getTime() < startTime && stamp.last_stamp.getTime() > startTime;
+    };
+    const overlaps = (circle, snake) => {
+      return snake.some(s => geodesyDistance(circle, s) < 1000);
+    };
+    const addToSnake = (circle) => {
+      const snake = snakeOrigins.find(s => overlaps(circle, s));
+      if (snake) {
+        snake.push(circle);
+      }
+      else {
+        snakeOrigins.push([ circle ]);
+      }
+    };
+
+    for (const circle of circles.filter(x => atStartTime(x))) {
+      addToSnake(circle);
+    }
+
+    snakeOrigins.sort((a, b) => b.length - a.length);
+    snakeOrigins.map((snake, snakeId) => {
+      for (const circle of snake) {
+        //circle.snake = snakeId;
+        for (const idx of circle.dataPointIdxs) {
+          const p = dataPoints[idx];
+          const restOfTrack = p.track.slice(p.trackIdx, -1);
+          for (const dataPoint of restOfTrack) {
+            dataPoint.snake = snakeId;
+            for (const c of dataPoint.circles) {
+              //if (circles[c].snake && circles[c].snake != snakeId) {
+              //  console.log("Circle is in multiple snakes:", circles[c].snake, snakeId);
+              //}
+              circles[c].snake = snakeId;
+            }
+          }
+        }
+      }
+    });
+
+    const calcWeight = (paths) => {
+      return paths.reduce((sum, elem) => sum + 1 / elem.length, 0);
+    };
+
+    const mergeTargetPathsForBlob = (blob) => {
+      const allPaths = {};
+      for (const circle of blob) {
+        for (const targetId in circle.pathsTo) {
+          if (allPaths.hasOwnProperty(targetId)) {
+            for (const path of circle.pathsTo[targetId])
+              allPaths[targetId].paths.push(path);
+          }
+          else {
+            allPaths[targetId] = {
+              id: targetId,
+              paths: circle.pathsTo[targetId]
+            };
+          }
+        }
+      }
+      return allPaths;
+    };
+
+    const calculateCircleClusters = (circleIds) => {
+      const totalIds = circleIds.length;
+      const clusters = circleIds.map(id => ({
+        ids: [ id ],
+        latLng: L.latLng(circles[id].lat, circles[id].lng),
+      }));
+      const clusterDist = (i, j) => {
+        if (clusters[i] && clusters[j])
+          return geodesyDistance(clusters[i].latLng, clusters[j].latLng);
+        else
+          console.log(clusters[i], clusters[j]);
+      };
+      const countIds = (sum, cluster) => sum + cluster.ids.length;
+      const largestGroups = (n) => {
+        clusters.sort((a, b) => b.ids.length - a.ids.length);
+        return clusters.slice(0, n);
+      };
+
+      // Cluster until 80% of IDs are in 3 largest groups.
+      while (largestGroups(3).reduce(countIds, 0) < totalIds * 0.8) {
+        //console.log("From", clusters.length, "clusters, the top 3 have",
+        //            largestGroups(3).reduce(countIds, 0), "elements");
+        let minDist = 10000;
+        let min_i = -1;
+        let min_j = -1;
+        for (let i = 0; i < clusters.length; i++) {
+          for (let j = i + 1; j < clusters.length; j++) {
+            const dist = clusterDist(i, j);
+            if (dist < minDist) {
+              [ minDist, min_i, min_j ] = [ dist, i, j];
+            }
+          }
+        }
+
+        clusters[min_i].ids = clusters[min_i].ids.concat(clusters[min_j].ids);
+        clusters[min_i].latLng = averageLatLng(circles, clusters[min_i].ids);
+        clusters.splice(min_j, 1);
+      }
+
+      return clusters;
+    };
+
+
+//    let i = 0;
+//    let blobs = [ ...snakeOrigins ];
+//
+//    while (i < blobs.length) {
+//      const allPaths = mergeTargetPathsForBlob(blobs[i]);
+//      const targetClusters = calculateCircleClusters(Object.keys(allPaths));
+//
+//      if (targetClusters.length > 0) {
+//        blobs.push(targetClusters[0]);
+//        for (let k = 1; k < targetClusters.length; k++) {
+//          if (targetClusters[k].length < targetClusters[0].length * 0.5)
+//            break;
+//          blobs.push(targetClusters[k].ids.map(id => circle[id]));
+//        }
+//      }
+//
+//      //const weighedPaths = Object.values(allPaths).sort((a, b) => {
+//      //  return calcWeight(b.paths) - calcWeight(a.paths);
+//      //});
+//      //const topPaths = weighedPaths.slice(0, weighedPaths.length / 3);
+//      //const topIds = topPaths.reduce((topIds, path) => {
+//      //  return topIds.push(path.id);
+//      // }, []);
+//
+//      console.log(targetClusters);
+//      i++;
+//    }
+
+
+//        for (const prevCircleId in dataPointsSince) {
+//          if (dataPointsSince[prevCircleId].length > 5) {
+//            delete dataPointsSince[prevCircleId];
+//          } else {
+//            dataPointsSince[prevCircleId].push(dataPoint);
+//          }
+//        }
+//
+//        for (const currCircle of dataPoint.circles) {
+//          dataPointsSince[currCircle.id] = [];
+//          for (const prevCircleId in dataPointsSince) {
+//            const path = dataPointsSince[prevCircleId];
+//            if (path.length > 0) {
+//              if (currCircle.pathsFrom.hasOwnProperty(prevCircleId)) {
+//                currCircle.pathsFrom[prevCircleId].push(path);
+//              }
+//              else {
+//                currCircle.pathsFrom[prevCircleId] = [ path ];
+//              }
+//            }
+//          }
+//        }
+//      }
 
     return {
-      circles: circles
+      //circles: tracks[0][206].circles.map(x => circles[x])
+      circles: circles,
+      snakes: snakeOrigins, //.map((_, idx) => colors[idx])
     };
   }; // CriticalSnake.PostProcessor.detectRoutes2()
 

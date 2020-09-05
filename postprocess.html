@@ -29,7 +29,7 @@
   <link rel="stylesheet" href="3rd-party/leaflet16/leaflet.css">
   <script src="3rd-party/leaflet16/leaflet.js"></script>
   <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
-  <!-- <script src="http://maps.stamen.com/js/tile.stamen.js?v1.3.0"></script> -->
+  <script src="3rd-party/geodesy11/latlon-spherical.min.js"></script>
 
   <script src="critical-snake/common.js"></script>
   <script src="critical-snake/marker.js"></script>
@@ -38,6 +38,7 @@
   <script src="critical-snake/utils.js"></script>
 
   <script>
+
     const params = parseUrlParams(window.location.href);
     const showMarkerColors = Boolean(params["colors"]);
 
@@ -50,11 +51,6 @@
           )
       }
     );
-
-//    let layerUrl = "http://c.tile.stamen.com/watercolor/${z}/${x}/${y}.jpg";
-//    const baseLayer = new L.StamenTileLayer("watercolor", {
-//      detectRetina: true
-//    });
 
     let bikeMap = createBikeMap(L, baseLayer, {
       showStats: true, showControls: true, showZoom: true
@@ -91,13 +87,92 @@
       }
     });
 
-    const square = [];
-    square.push(L.latLng(52.500, 13.400));
-    square.push(L.latLng(52.501, 13.400));
-    square.push(L.latLng(52.501, 13.402));
-    square.push(L.latLng(52.500, 13.402));
-    square.push(L.latLng(52.500, 13.400));
-    L.polyline(square, { color: "rgb(255, 0, 0)" }).addTo(bikeMap);
+//    const square = [];
+//    square.push(L.latLng(52.500, 13.400));
+//    square.push(L.latLng(52.501, 13.400));
+//    square.push(L.latLng(52.501, 13.402));
+//    square.push(L.latLng(52.500, 13.402));
+//    square.push(L.latLng(52.500, 13.400));
+//    L.polyline(square, { color: "rgb(255, 0, 0)" }).addTo(bikeMap);
+//
+//    function getDirection(c1, c2) {
+//      const p1 = new LatLon(c1.lat, c1.lng);
+//      const p2 = new LatLon(c2.lat, c2.lng);
+//      return p1.bearingTo(p2);
+//    }
+//
+//    function getDistance(c1, c2) {
+//      const p1 = new LatLon(c1.lat, c1.lng);
+//      const p2 = new LatLon(c2.lat, c2.lng);
+//      return p1.distanceTo(p2);
+//    }
+//
+//    function getDestination(c, bearing, dist) {
+//      const p = new LatLon(c.lat, c.lng);
+//      return p.destinationPoint(dist, bearing);
+//    }
+//
+//    const c1 = L.latLng(52.500, 13.410);
+//    const c2 = L.latLng(52.501, 13.411);
+//    const c3 = L.latLng(52.501, 13.409);
+//    const c4 = L.latLng(52.499, 13.409);
+//    const c5 = L.latLng(52.499, 13.411);
+//    L.circle(c2, {
+//      stroke: false,
+//      fillColor: `rgb(0, 0, 255)`,
+//      fillOpacity: 1,
+//      radius: 10,
+//    }).addTo(bikeMap);
+//    L.circle(c3, {
+//      stroke: false,
+//      fillColor: `rgb(0, 255, 0)`,
+//      fillOpacity: 1,
+//      radius: 10,
+//    }).addTo(bikeMap);
+//    L.circle(c4, {
+//      stroke: false,
+//      fillColor: `rgb(220, 220, 0)`,
+//      fillOpacity: 1,
+//      radius: 10,
+//    }).addTo(bikeMap);
+//    L.circle(c5, {
+//      stroke: false,
+//      fillColor: `rgb(255, 0, 0)`,
+//      fillOpacity: 1,
+//      radius: 10,
+//    }).addTo(bikeMap);
+//
+//    const dir2 = getDirection(c1, c2);
+//    const dist2 = getDistance(c1, c2);
+//    const dest2 = getDestination(c1, dir2, dist2);
+//    console.log(dest2);
+//    L.polyline([c1, dest2], {
+//      color: `rgb(0, 0, 255)`,
+//      opacity: 0.75,
+//    }).addTo(bikeMap);
+//
+//    const dir3 = getDirection(c1, c3);
+//    const dist3 = getDistance(c1, c3);
+//    L.polyline([c1, getDestination(c1, dir3, dist3)], {
+//      color: `rgb(0, 255, 0)`,
+//      opacity: 0.75,
+//    }).addTo(bikeMap);
+//
+//    const dir4 = getDirection(c1, c4);
+//    const dist4 = getDistance(c1, c4);
+//    L.polyline([c1, getDestination(c1, dir4, dist4)], {
+//      color: `rgb(220, 220, 0)`,
+//      opacity: 0.75,
+//    }).addTo(bikeMap);
+//
+//    const dir5 = getDirection(c1, c5);
+//    const dist5 = getDistance(c1, c5);
+//    L.polyline([c1, getDestination(c1, dir5, dist5)], {
+//      color: `rgb(255, 0, 0)`,
+//      opacity: 0.75,
+//    }).addTo(bikeMap);
+//
+//    //bikeMap.setView(c1, 17);
 
     const minute = 60 * 1000;
     const kilometer = 1000;
@@ -118,7 +193,7 @@
       gathering: {
         maxPointToPointDistance: 1 * kilometer,
         windowSize: 10 * minute,
-        windowOverlap: 5 * minute,
+        windowOverlap: 2 * minute,
       },
       route: {
         maxPointToPointDistance: 0.2 * kilometer,
@@ -161,8 +236,10 @@
       console.log("Filtered", PostProcessor.filteredDupes, "duplicate data points");
       console.log("Filtered", PostProcessor.filteredOutOfRange, "data points outside area of interest");
 
-      const replayOrigins = PostProcessor.detectGatheringPoints(replayBaseData.dataPoints);
+      const replayOrigins = { origins: [] };
+//      const replayOrigins = PostProcessor.detectGatheringPoints(replayBaseData.dataPoints);
 
+//      const replayRoutes = { circles: [] };
       const replayRoutes = PostProcessor.detectRoutes2(replayBaseData.dataPoints,
                                                        replayBaseData.tracks,
                                                        replayOrigins.origins);
@@ -174,6 +251,7 @@
       console.log(replayBaseData.dataPoints);
       console.log(replayOrigins.origins);
       console.log(replayRoutes.circles);
+      console.log(replayRoutes.snakes);
 
       playbackFrameIdx = 0;
       playbackDataset = { ...replayBaseData, ...replayOrigins, ...replayRoutes };
@@ -245,7 +323,7 @@
     let trackHeads = L.layerGroup([], { pane: "markerPane" });
     let trackShadows = L.layerGroup([], { pane: "shadowPane" });
 
-    function drawTracks(dataset, maxStamp) {
+    function drawTracks(dataset, stamp) {
       bikeMap.removeLayer(trackHeads);
       bikeMap.removeLayer(originMarkers);
       bikeMap.removeLayer(trackShadows);
@@ -254,50 +332,58 @@
       originMarkers.clearLayers();
       trackShadows.clearLayers();
 
-      for (let t = 0; t < dataset.tracks.length; t++) {
-        const coords = dataset.tracks[t].filter(frame => frame.first_stamp <= maxStamp);
-        //const isLastFrame = (coords.length == dataset.tracks[t].length);
-        //
-        //if (coords.length > 3 && !isLastFrame)
-        //  trackHeads.addLayer(
-        //    L.polyline(coords.splice(-2, 2), {
-        //      color: `hsl(${t},100%,50%)`,
-        //      opacity: 0.75
-        //    }));
+      const colors = [ "#c90002", "#1b3d9f", "#00c9bc", "#ff0099", "#c112e0",
+                       "#000", "#000", "#000", "#000", "#000", "#000", "#000",
+                       "#000", "#000", "#000", "#000", "#000", "#000", "#000",
+                       "#000", "#000", "#000", "#000", "#000", "#000", "#000",
+                       "#000", "#000", "#000", "#000", "#000", "#000", "#000" ];
 
-        if (coords.length > 1)
-          trackShadows.addLayer(
-            L.polyline(coords, {
-              color: `rgb(100, 100, 100)`,
-              opacity: 0.1
-            }));
-      }
+      const inTime = (x) => x.first_stamp <= stamp && x.last_stamp >= stamp;
 
-      for (const circle of dataset.circles) {
-        if (circle.first_stamp <= maxStamp && circle.last_stamp >= maxStamp) {
-          trackHeads.addLayer(
-            L.circle(circle.center, {
-              stroke: false,
-              fillColor: `rgb(255, 0, 0)`,
-              fillOpacity: 0.25,
-              radius: 5 * Math.log2(circle.size),
-            }));
+      const nextSegment = (track, begin, snakeId) => {
+        for (let i = begin + 1; i < track.length; i++) {
+          if (track[i].last_stamp >= stamp)
+            return [track.slice(begin, i), track.length, snakeId];
+          if (track[i].snake != snakeId)
+            return [track.slice(begin, i), i, track[i].snake];
+        }
+        return [track.slice(begin), track.length, null];
+      };
+
+      for (const track of dataset.tracks) {
+        let segment = [];
+        let snakeId = null;
+        let dataPointIdx = 1;
+
+        while (dataPointIdx < track.length) {
+          const col = snakeId == null ? "#888" : colors[snakeId];
+          const group = snakeId == null ? trackShadows : trackHeads;
+          [segment, dataPointIdx, snakeId] = nextSegment(track, dataPointIdx, snakeId);
+
+          if (segment.length > 1 && col != "#888")
+            group.addLayer(
+              L.polyline(segment, {
+                color: col,
+                opacity: 0.05
+              }));
         }
       }
 
-      const minStamp = new Date(maxStamp.getTime() - 5 * 60 * 1000);
-      const inTime = (s) => s.last_stamp >= minStamp && s.first_stamp <= maxStamp;
+      //for (const circle of dataset.circles) { //.filter(x => inTime(x))) {
+      for (const circle of dataset.circles.filter(x => inTime(x))) {
+        trackHeads.addLayer(
+          L.circle(circle, {
+            stroke: false,
+            fillColor: circle.snake == null ? "#888" : colors[circle.snake],
+            fillOpacity: 0.75,
+            radius: 10 * Math.log2(circle.dataPointIdxs.length),
+          }));
+      }
 
-      for (let s = 0; s < dataset.origins.length; s++) {
-        if (inTime(dataset.origins[s])) {
-          for (const group of dataset.origins[s].groups) {
-            const op = (sum, coord) => L.latLng(sum.lat + coord.lat, sum.lng + coord.lng);
-            const sum = group.reduce(op, L.latLng(0, 0));
-            const center = L.latLng(sum.lat / group.length, sum.lng / group.length);
-
-            originMarkers.addLayer(
-              L.marker(center, { icon: markers.origin }));
-          }
+      for (const origin of dataset.origins.filter(x => inTime(x))) {
+        for (const latLng of back(origin.latLngs)) {
+          originMarkers.addLayer(
+            L.marker(latLng, { icon: markers.origin }));
         }
       }
 
