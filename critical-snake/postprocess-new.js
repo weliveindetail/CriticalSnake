@@ -314,6 +314,11 @@ CriticalSnake.PostProcessor = function(options) {
     return L.latLng(centerLat, centerLng);
   }
 
+  function averageFirstStamp(dataPoints, indexes) {
+    indexes = indexes || Array.from(dataPoints.keys());
+    const accStamp = (sum, x) => sum + dataPoints[x].first_stamp.getTime();
+    return new Date(indexes.reduce(accStamp, 0) / indexes.length);
+  }
 
   function minFirstStamp(dataPoints, indexes) {
     indexes = indexes || Array.from(dataPoints.keys());
@@ -603,6 +608,47 @@ CriticalSnake.PostProcessor = function(options) {
     return this;
   }
 
+  function createOrJoinCircle(matches, circles, dataPoints) {
+    const minute = 60 * 1000;
+    const latLng = averageLatLng(dataPoints, matches);
+    const stamp = averageFirstStamp(dataPoints, matches).getTime();
+
+    let circleToJoin = null;
+    for (let i = circles.length - 1; i >= 0; i--) {
+      if (Math.abs(stamp - circles[i].first_stamp.getTime()) < 5 * minute)
+        if (geodesyDistance(circles[i], latLng) < 100) {
+          circleToJoin = circles[i];
+          break;
+        }
+    }
+
+    if (circleToJoin) {
+      const indexes = circleToJoin.dataPointIdxs.concat(matches);
+      const latLng = averageLatLng(dataPoints, indexes);
+      circleToJoin.lat = latLng.lat;
+      circleToJoin.lng = latLng.lng;
+      circleToJoin.first_stamp = minFirstStamp(dataPoints, indexes);
+      circleToJoin.last_stamp = maxLastStamp(dataPoints, indexes);
+      circleToJoin.dataPointIdxs = indexes;
+
+      //circles.sort((a, b) => a.first_stamp.getTime() - b.first_stamp.getTime());
+      return circleToJoin;
+    }
+    else {
+      const circle = {
+        lat: latLng.lat,
+        lng: latLng.lng,
+        first_stamp: minFirstStamp(dataPoints, matches),
+        last_stamp: maxLastStamp(dataPoints, matches),
+        dataPointIdxs: matches,
+        id: circles.length,
+      }
+      circles.push(circle);
+      //circles.sort((a, b) => a.first_stamp.getTime() - b.first_stamp.getTime());
+      return circle;
+    }
+  }
+
   this.detectRoutes2 = (dataPoints, tracks, origins) => {
     const pointsInTime = ConvexEnvelopeSearch(dataPoints, binarySearch);
 
@@ -639,20 +685,7 @@ CriticalSnake.PostProcessor = function(options) {
           const undirectedMatches = pointsInTime.itemsInEnvelope(samplePoint);
           const matches = undirectedMatches.filter(m => dirDiff(i, m) < 45);
           if (matches.length > 5) {
-            const latLng = averageLatLng(dataPoints, matches);
-            const circle = {
-              first_stamp: minFirstStamp(dataPoints, matches),
-              last_stamp: maxLastStamp(dataPoints, matches),
-              dataPointIdxs: matches,
-              lat: latLng.lat,
-              lng: latLng.lng,
-              vector: {
-                direction: averageDirectionWithWrap(dataPoints, matches),
-              },
-              pathsTo: {},
-              id: circles.length,
-            }
-            circles.push(circle);
+            const circle = createOrJoinCircle(matches, circles, dataPoints);
             for (const idx of matches) {
               dataPoints[idx].circles.push(circle.id);
             }
@@ -663,6 +696,13 @@ CriticalSnake.PostProcessor = function(options) {
     const timeEnd = Date.now();
     console.log("Populating circles took:", (timeEnd - timeBegin), "ms");
 
+    // Finalize circles
+    for (const circle of circles) {
+      const idxs = circle.dataPointIdxs;
+      circle.vector = {
+        direction: averageDirectionWithWrap(dataPoints, idxs),
+      };
+    }
 
 
     //const leveledScalar = (avg, num, val) => (num * avg + val) / (num + 1);
@@ -822,7 +862,6 @@ CriticalSnake.PostProcessor = function(options) {
     snakeOrigins.sort((a, b) => b.length - a.length);
     snakeOrigins.map((snake, snakeId) => {
       for (const circle of snake) {
-        //circle.snake = snakeId;
         for (const idx of circle.dataPointIdxs) {
           const p = dataPoints[idx];
           const restOfTrack = p.track.slice(p.trackIdx, -1);
