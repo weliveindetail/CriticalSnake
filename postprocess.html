@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <title>CriticalSnake Replay</title>
+  <!--
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/open-fonts@1.1.1/fonts/inter.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css">
+  -->
   <style>
     body {
       background: #333;
@@ -28,6 +32,7 @@
 
   <link rel="stylesheet" href="3rd-party/leaflet16/leaflet.css">
   <script src="3rd-party/leaflet16/leaflet.js"></script>
+  <script src="3rd-party/leaflet-semicircle20/Semicircle.js"></script>
   <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
   <script src="3rd-party/geodesy11/latlon-spherical.min.js"></script>
 
@@ -73,6 +78,7 @@
       }
     });
 
+    bikeMap.historySlider.attr({ min: 0, max: 500 });
     $(document).on("input", bikeMap.historySlider, () => {
       if (playbackDataset) {
         playbackFrameIdx = parseInt(bikeMap.historySlider.val());
@@ -230,31 +236,40 @@
     });
 
     function loadRecording(data) {
+      const analyzeTracksBegin = Date.now();
       const rawDataSet = JSON.parse(data);
-      const replayBaseData = PostProcessor.renderTracks(rawDataSet);
+      const [ tracks, dataPoints ] = PostProcessor.analyzeTracks(rawDataSet);
+      console.log("Data-points:", dataPoints);
+      console.log("Analyzing tracks took:", Date.now() - analyzeTracksBegin, "ms");
 
       console.log("Filtered", PostProcessor.filteredDupes, "duplicate data points");
       console.log("Filtered", PostProcessor.filteredOutOfRange, "data points outside area of interest");
 
-      const replayOrigins = { origins: [] };
-//      const replayOrigins = PostProcessor.detectGatheringPoints(replayBaseData.dataPoints);
+      const detectCirclesBegin = Date.now();
+      const circles = PostProcessor.detectCircles(dataPoints);
+      console.log("Circles:", circles);
+      console.log("Populating circles took:", Date.now() - detectCirclesBegin, "ms");
 
-//      const replayRoutes = { circles: [] };
-      const replayRoutes = PostProcessor.detectRoutes2(replayBaseData.dataPoints,
-                                                       replayBaseData.tracks,
-                                                       replayOrigins.origins);
+      const associateSnakesBegin = Date.now();
+      const snakes = PostProcessor.associateSnakes(dataPoints, circles);
+      console.log("Snakes:", snakes);
+      console.log("Associating snakes took:", Date.now() - associateSnakesBegin, "ms");
 
-      bikeMap.historySlider.attr({ min: 0, max: 100 });
-      bikeMap.historySlider.val(0);
+      const populateTrackSegmentsBegin = Date.now();
+      const segments = PostProcessor.populateTrackSegments(dataPoints, tracks, circles);
+      console.log("Segments:", segments);
+      console.log("Populating track segments took:", Date.now() - populateTrackSegmentsBegin, "ms");
 
-      console.log(replayBaseData.tracks);
-      console.log(replayBaseData.dataPoints);
-      console.log(replayOrigins.origins);
-      console.log(replayRoutes.circles);
-      console.log(replayRoutes.snakes);
+      playbackDataset = {
+        dataPoints: dataPoints,
+        circles: circles,
+        snakes: snakes,
+        tracks: tracks,
+        segments: segments,
+        timeRange: PostProcessor.getTimeRange(circles),
+      };
 
       playbackFrameIdx = 0;
-      playbackDataset = { ...replayBaseData, ...replayOrigins, ...replayRoutes };
       refreshView(playbackFrameIdx);
 
       bikeMap.loadingLabel.hide();
@@ -266,11 +281,13 @@
     // ----------------------------------------------------
 
     function refreshView(frameIdx) {
+      const refreshViewBegin = Date.now();
       bikeMap.historySlider.val(frameIdx);
 
-      const begin = playbackDataset.timeRange[0].getTime();
-      const end = playbackDataset.timeRange[1].getTime();
-      const offset = (end - begin) * (frameIdx / 100);
+      const minute = 60 * 1000;
+      const begin = playbackDataset.timeRange.begin.getTime() - 5 * minute;
+      const end = playbackDataset.timeRange.end.getTime() + 5 * minute;
+      const offset = (end - begin) * (frameIdx / 500);
       const d = new Date(begin + offset);
 
       drawTracks(playbackDataset, d);
@@ -282,13 +299,16 @@
         `🕗 ${pad2(d.getHours())}:${pad2(d.getMinutes())} ` +
         `📍🚲 ???`
       );
+
+      console.log("Rendering frame took:", Date.now() - refreshViewBegin, "ms");
     }
 
     // ----------------------------------------------------
 
     let frameTimer = null;
-    const testFPS = 3;
+    const testFPS = 15;
     function resume() {
+      console.log("Rendering", testFPS, "FPS (", 1000 / testFPS, "ms per frame)");
       bikeMap.playbackButton.val("||");
       frameTimer = setInterval(() => {
         switch (playbackFrameIdx) {
@@ -296,7 +316,7 @@
             refreshView(playbackFrameIdx);
             playbackFrameIdx += 1;
             break;
-          case 100:
+          case 500:
             clearTimeout(frameTimer);
             refreshView(playbackFrameIdx);
             bikeMap.playbackButton.val("▶");
@@ -332,58 +352,136 @@
       originMarkers.clearLayers();
       trackShadows.clearLayers();
 
-      const colors = [ "#c90002", "#1b3d9f", "#00c9bc", "#ff0099", "#c112e0",
-                       "#000", "#000", "#000", "#000", "#000", "#000", "#000",
-                       "#000", "#000", "#000", "#000", "#000", "#000", "#000",
-                       "#000", "#000", "#000", "#000", "#000", "#000", "#000",
-                       "#000", "#000", "#000", "#000", "#000", "#000", "#000" ];
+      const colors = (snakeId) => {
+        if (snakeId == null)
+          return "#888";
+
+        const snakeColors = [
+          "#c90002", // red
+          "#1b3d9f", //
+          "#00c9bc", //
+          "#ff0099", //
+          "#c112e0", //
+        ];
+
+        if (snakeId >= 0 && snakeId < snakeColors.length)
+          return snakeColors[snakeId];
+
+        return "#000";
+      }
+
+//      const nextSegment = (track, begin) => {
+//        const joinSets = (snakes, circleIdx) => {
+//          for (const snakeId of dataset.circles[circleIdx].snakes)
+//            snakes.add(snakeId);
+//          return snakes;
+//        };
+//
+//        const snakes = (circles) => {
+//          if (circles)
+//            return Array.from(circles).reduce(joinSets, new Set());
+//          else
+//            console.log(circles);
+//        };
+//
+//        const snakesEqual = (a, b) => {
+//          if (a.size != b.size)
+//            return false;
+//          for (const snake of a)
+//            if (!b.has(snake))
+//              return false;
+//          return true;
+//        };
+//
+//        const snakesBegin = snakes(track[begin].circles);
+//
+//        for (let i = begin + 1; i < track.length - 1; i++) {
+//          if (track[i].last_stamp >= stamp)
+//            return [track.slice(begin, i + 1), snakesBegin, track.length];
+//
+//          if (!snakesEqual(snakesBegin, snakes(track[i].circles)))
+//            return [track.slice(begin, i + 1), snakesBegin, i];
+//        }
+//        return [track.slice(begin), new Set(), track.length];
+//      };
+//
+//      let count = 0;
+//      for (const track of dataset.tracks) {
+//        let trackPointIdx = 0;
+//        do {
+//          const [segment, snakeIds, nextIdx] = nextSegment(track, trackPointIdx);
+//          count++;
+//
+//          if (segment.length > 1) {
+//            if (snakeIds.size == 0) {
+//              // draw non-associated track segment
+//            }
+//            else {
+//              for (const snakeId of snakeIds)
+//                trackShadows.addLayer(
+//                    L.polyline(segment, {
+//                      color: colors(snakeId),
+//                      opacity: 0.05
+//                    }));
+//            }
+//          }
+//
+//          trackPointIdx = nextIdx;
+//        } while (trackPointIdx < track.length - 1);
+//      }
+//      console.log("Track segments in frame:", count);
+
+
+      const startedAlready = (x) => x.first_stamp <= stamp;
+      const didNotStartYet = (x) => !startedAlready(x);
+
+      for (const segment of dataset.segments.filter(startedAlready)) {
+        if (segment.snakes.length == 0) {
+          // Draw non-associated track segments?
+        }
+        else {
+          const end = segment.dataPointIdxs.findIndex(i => didNotStartYet(dataset.dataPoints[i]));
+          if (end > 0 || end == -1) {
+            const coords = segment.dataPointIdxs.slice(0, end)
+                                                .map(idx => dataset.dataPoints[idx]);
+            for (const snakeId of segment.snakes) {
+              trackShadows.addLayer(
+                  L.polyline(coords, {
+                    color: colors(snakeId),
+                    opacity: 0.05
+                  }));
+            }
+          }
+        }
+      }
+
+      const options = {
+        stroke: false,
+        fillOpacity: 0.75,
+        fillColor: null,
+        radius: null,
+      };
+
 
       const inTime = (x) => x.first_stamp <= stamp && x.last_stamp >= stamp;
 
-      const nextSegment = (track, begin, snakeId) => {
-        for (let i = begin + 1; i < track.length; i++) {
-          if (track[i].last_stamp >= stamp)
-            return [track.slice(begin, i), track.length, snakeId];
-          if (track[i].snake != snakeId)
-            return [track.slice(begin, i), i, track[i].snake];
-        }
-        return [track.slice(begin), track.length, null];
-      };
-
-      for (const track of dataset.tracks) {
-        let segment = [];
-        let snakeId = null;
-        let dataPointIdx = 1;
-
-        while (dataPointIdx < track.length) {
-          const col = snakeId == null ? "#888" : colors[snakeId];
-          const group = snakeId == null ? trackShadows : trackHeads;
-          [segment, dataPointIdx, snakeId] = nextSegment(track, dataPointIdx, snakeId);
-
-          if (segment.length > 1 && col != "#888")
-            group.addLayer(
-              L.polyline(segment, {
-                color: col,
-                opacity: 0.05
-              }));
-        }
-      }
-
-      //for (const circle of dataset.circles) { //.filter(x => inTime(x))) {
       for (const circle of dataset.circles.filter(x => inTime(x))) {
-        trackHeads.addLayer(
-          L.circle(circle, {
-            stroke: false,
-            fillColor: circle.snake == null ? "#888" : colors[circle.snake],
-            fillOpacity: 0.75,
-            radius: 10 * Math.log2(circle.dataPointIdxs.length),
-          }));
-      }
-
-      for (const origin of dataset.origins.filter(x => inTime(x))) {
-        for (const latLng of back(origin.latLngs)) {
-          originMarkers.addLayer(
-            L.marker(latLng, { icon: markers.origin }));
+        options.radius = 10 * Math.log2(circle.dataPointIdxs.length);
+        if (circle.snakes.size == 1) {
+          const snakeId = circle.snakes.values().next().value;
+          options.color = colors(snakeId);
+          trackHeads.addLayer(L.circle(circle, options));
+        }
+        else {
+          let angle = 0;
+          const arcSize = 360 / circle.snakes.size;
+          for (const snakeId of circle.snakes) {
+            options.startAngle = angle;
+            options.stopAngle = angle + arcSize;
+            options.color = colors(snakeId);
+            trackHeads.addLayer(L.semiCircle(circle, options));
+            angle += arcSize;
+          }
         }
       }
 
