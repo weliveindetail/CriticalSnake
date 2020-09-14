@@ -95,8 +95,9 @@
       console.log("Circles:", circles);
       console.log("Populating circles took:", Date.now() - detectCirclesBegin, "ms");
 
+      const startTime = 1598638200000; // 2020-08-28, 20:10
       const associateSnakesBegin = Date.now();
-      const snakes = PostProcessor.associateSnakes(dataPoints, circles);
+      const snakes = PostProcessor.associateSnakes(dataPoints, circles, { startTime: startTime });
       console.log("Snakes:", snakes);
       console.log("Associating snakes took:", Date.now() - associateSnakesBegin, "ms");
 
@@ -105,13 +106,18 @@
       console.log("Segments:", segments);
       console.log("Populating track segments took:", Date.now() - populateTrackSegmentsBegin, "ms");
 
+      const minute = 60 * 1000;
+      const timeRange = PostProcessor.getTimeRange(circles);
+      console.log("Data covers time range\nfrom:", timeRange.begin, "\nto:", timeRange.end);
+
       playbackDataset = {
         dataPoints: dataPoints,
         circles: circles,
         snakes: snakes,
         tracks: tracks,
         segments: segments,
-        timeRange: PostProcessor.getTimeRange(circles),
+        begin: timeRange.begin.getTime() - 5 * minute,
+        end: timeRange.end.getTime(),
       };
 
       playbackFrameIdx = 0;
@@ -127,11 +133,9 @@
       const refreshViewBegin = Date.now();
       bikeMap.historySlider.val(frameIdx);
 
-      const minute = 60 * 1000;
-      const begin = playbackDataset.timeRange.begin.getTime() - 5 * minute;
-      const end = playbackDataset.timeRange.end.getTime() + 5 * minute;
-      const offset = (end - begin) * (frameIdx / 500);
-      const d = new Date(begin + offset);
+      const duration = playbackDataset.end - playbackDataset.begin;
+      const offset = duration * (frameIdx / 500);
+      const d = new Date(playbackDataset.begin + offset);
 
       drawTracks(playbackDataset, d);
 

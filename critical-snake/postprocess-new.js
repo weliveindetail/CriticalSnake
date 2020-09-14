@@ -443,6 +443,7 @@
     },
     samplePointDist: 100,
     minDataPointMatches: 5,
+    skipSamplingThreshold: 0,
   };
 
   this.detectCircles = (dataPoints, options) => {
@@ -473,7 +474,7 @@
 
     const circles = [];
     for (const p of dataPoints) {
-      if (p.circles.size > 0)
+      if (p.circles.size > opts.skipSamplingThreshold)
         continue;
 
       const samplePoints = interpolateLinear(p, p.next, opts.samplePointDist);
@@ -496,46 +497,46 @@
     return circles;
   }; // CriticalSnake.PostProcessor.detectCircles()
 
-  this.getTimeRange = function(circles) {
-    const snakeIdxs = circles.map((c, idx) => c.snakes.size > 0 ? idx : null)
-                             .filter(idx => idx != null);
-    return {
-      begin: minFirstStamp(circles, snakeIdxs),
-      end: maxLastStamp(circles, snakeIdxs),
-    };
-  }; // CriticalSnake.PostProcessor.getTimeRange()
+  const associateSnakesOptions = {
+    startTime: null,
+    expectedNumberOfSnakes: -1,
+    maxDistance: 2000,
+  };
 
-  this.associateSnakes = function(dataPoints, circles) {
-    for (const dataPoint of dataPoints) {
-      dataPoint.snake = null;
-    }
+  this.associateSnakes = function(dataPoints, circles, options) {
+    const opts = { ...associateSnakesOptions, ...options };
+
     for (const circle of circles) {
       circle.snakes = new Set();
     }
 
     const snakeOrigins = [];
-    const startTime = 1598638200000; // 20:10
-    const atStartTime = (stamp) => {
-      return stamp.first_stamp.getTime() < startTime && stamp.last_stamp.getTime() > startTime;
+    if (!opts.startTime) {
+      console.error("Cannot detect snakes without a start time (yet)");
+      return null;
+    }
+
+    const atStartTime = (circle) => {
+      return circle.first_stamp.getTime() < opts.startTime &&
+             circle.last_stamp.getTime() > opts.startTime;
     };
-    const overlaps = (circle, snake) => {
-      return snake.some(s => geodesyDistance(circle, s) < 1000);
-    };
-    const addToSnake = (circle) => {
-      const snake = snakeOrigins.find(s => overlaps(circle, s));
-      if (snake) {
-        snake.push(circle);
+
+    for (const circle of circles.filter(atStartTime)) {
+      const closeEnough = (c) => geodesyDistance(circle, c) < opts.maxDistance;
+      const origin = snakeOrigins.find(circles => circles.some(closeEnough));
+
+      if (origin) {
+        origin.push(circle);
       }
       else {
         snakeOrigins.push([ circle ]);
       }
-    };
-
-    for (const circle of circles.filter(x => atStartTime(x))) {
-      addToSnake(circle);
     }
 
     snakeOrigins.sort((a, b) => b.length - a.length);
+    if (opts.expectedNumberOfSnakes != -1) {
+      snakeOrigins.slice(0, opts.expectedNumberOfSnakes);
+    }
 
     snakeOrigins.map((snake, snakeId) => {
       for (const circle of snake) {
@@ -635,6 +636,16 @@
 
     return segments;
   }
+
+  this.getTimeRange = function(circles) {
+    // Find indexes of all circles that are associated with a snke.
+    const snakeIdxs = circles.map((c, idx) => c.snakes.size > 0 ? idx : null)
+                             .filter(idx => idx != null);
+    return {
+      begin: minFirstStamp(circles, snakeIdxs),
+      end: maxLastStamp(circles, snakeIdxs),
+    };
+  }; // CriticalSnake.PostProcessor.getTimeRange()
 
   this.indexMap = {};
   this.nextIndex = 0;
