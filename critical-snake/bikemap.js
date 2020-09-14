@@ -1,6 +1,9 @@
 
 function createBikeMap(L, baseLayer, options) {
-  let bikeMap = new L.map('osm-map', { zoomControl: false });
+  let bikeMap = new L.map('osm-map', {
+    renderer: L.canvas(),
+    zoomControl: false,
+  });
   bikeMap.setView([52.5219,13.4045], 13);
   bikeMap.addLayer(baseLayer);
 

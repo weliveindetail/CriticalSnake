@@ -432,28 +432,34 @@
 //      console.log("Track segments in frame:", count);
 
 
-      const startedAlready = (x) => x.first_stamp <= stamp;
-      const didNotStartYet = (x) => !startedAlready(x);
+      const startedAlready = (seg) => seg.first_stamp <= stamp;
+      const didNotStartYet = (idx) => !startedAlready(dataset.dataPoints[idx]);
+
+      const findEndIndex = (seg) => {
+        if (seg.last_stamp <= stamp)
+          return -1;
+        return seg.dataPointIdxs.findIndex(idx => didNotStartYet(idx));
+      };
 
       for (const segment of dataset.segments.filter(startedAlready)) {
-        if (segment.snakes.length == 0) {
-          // Draw non-associated track segments?
-        }
-        else {
-          const end = segment.dataPointIdxs.findIndex(i => didNotStartYet(dataset.dataPoints[i]));
-          if (end > 0 || end == -1) {
-            const coords = segment.dataPointIdxs.slice(0, end)
-                                                .map(idx => dataset.dataPoints[idx]);
-            for (const snakeId of segment.snakes) {
-              trackShadows.addLayer(
-                  L.polyline(coords, {
-                    color: colors(snakeId),
-                    opacity: 0.05
-                  }));
-            }
-          }
+        // Draw non-associated track segments?
+        if (segment.snakes.length == 0)
+          continue;
+
+        // Draw segment entirely or only the first number of data-points.
+        const end = findEndIndex(segment);
+        const coordIdxs = end < 0 ? segment.dataPointIdxs
+                                  : segment.dataPointIdxs.slice(0, end);
+
+        for (const snakeId of segment.snakes) {
+          trackShadows.addLayer(
+              L.polyline(coordIdxs.map(idx => dataset.dataPoints[idx]), {
+                color: colors(snakeId),
+                opacity: 0.05
+              }));
         }
       }
+
 
       const options = {
         stroke: false,
