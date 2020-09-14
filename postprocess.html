@@ -149,11 +149,13 @@
     // ----------------------------------------------------
 
     let frameTimer = null;
+    let rotatingCollisionCircles = 0;
     const testFPS = 15;
     function resume() {
       console.log("Rendering", testFPS, "FPS (", 1000 / testFPS, "ms per frame)");
       bikeMap.playbackButton.val("||");
       frameTimer = setInterval(() => {
+        rotatingCollisionCircles += testFPS;
         switch (playbackFrameIdx) {
           case 0:
             refreshView(playbackFrameIdx);
@@ -273,7 +275,7 @@
           canvas.addLayer(fullCircle(circle));
         }
         else {
-          let angle = 0;
+          let angle = rotatingCollisionCircles;
           const arcSize = 360 / circle.snakes.size;
           for (const id of circle.snakes) {
             canvas.addLayer(semiCircle(circle, id, angle, angle + arcSize));
