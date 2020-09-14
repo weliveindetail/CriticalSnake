@@ -2,71 +2,53 @@
 
   CriticalSnake.PostProcessor = function(options) {
 
-    const self = this;
+  const self = this;
 
-    function numericRange(min, max) {
-      this.contains = (val) => min < val && max > val;
-      return this;
-    }
-
-    this.coordFilters = {
-      Berlin: function() {
-        const latRange = new numericRange(52.40, 52.61);
-        const lngRange = new numericRange(13.23, 13.56);
-        return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
-      },
-      Barcelona: function() {
-        const latRange = numericRange(41.26, 41.45);
-        const lngRange = numericRange(2.00, 2.29);
-        return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
-      },
-    };
-
-    function importApiVersion2DataPoint(dataPoint) {
-      const floatCoord = (oldFormat) => {
-        let chars = oldFormat.toString().split('');
-        chars.splice(-6, 0, '.');
-        return parseFloat(chars.join(''));
-      };
-      const stamp = new Date(dataPoint.timestamp * 1000);
-      return {
-        first_stamp: stamp,
-        last_stamp: stamp,
-        lat: floatCoord(dataPoint.latitude),
-        lng: floatCoord(dataPoint.longitude)
-      };
-    }
-
-    function splitTrack(vector, options) {
-      if (vector.duration > options.maxGapDuration) {
-        return true;
-      }
-      if (vector.distance > options.maxGapDistance) {
-        return true;
-      }
-      return false;
-    }
-
-    function back(array) {
-      return array.length > 0 ? array[array.length - 1] : null;
-    }
-
-  // Use simple integers as track IDs.
-  function hashToIdx(hash) {
-    if (!self.indexMap.hasOwnProperty(hash)) {
-      // For split-tracks we can have multiple indexes for one participant.
-      self.indexMap[hash] = [ self.nextIndex++ ];
-    }
-    // Latest track-index for the participant.
-    return back(self.indexMap[hash]);
+  function numericRange(min, max) {
+    this.contains = (val) => min < val && max > val;
+    return this;
   }
 
-  function newIdxForHash(hash) {
-    if (!self.indexMap.hasOwnProperty(hash)) {
-      console.error("Invalid use of newIdxForHash()");
+  this.coordFilters = {
+    Berlin: function() {
+      const latRange = new numericRange(52.40, 52.61);
+      const lngRange = new numericRange(13.23, 13.56);
+      return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
+    },
+    Barcelona: function() {
+      const latRange = numericRange(41.26, 41.45);
+      const lngRange = numericRange(2.00, 2.29);
+      return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
+    },
+  };
+
+  function importApiVersion2DataPoint(dataPoint) {
+    const floatCoord = (oldFormat) => {
+      let chars = oldFormat.toString().split('');
+      chars.splice(-6, 0, '.');
+      return parseFloat(chars.join(''));
+    };
+    const stamp = new Date(dataPoint.timestamp * 1000);
+    return {
+      first_stamp: stamp,
+      last_stamp: stamp,
+      lat: floatCoord(dataPoint.latitude),
+      lng: floatCoord(dataPoint.longitude)
+    };
+  }
+
+  function splitTrack(vector, options) {
+    if (vector.duration > options.maxGapDuration) {
+      return true;
     }
-    self.indexMap[hash].push(self.nextIndex++);
-    return back(self.indexMap[hash]);
+    if (vector.distance > options.maxGapDistance) {
+      return true;
+    }
+    return false;
+  }
+
+  function back(array) {
+    return array.length > 0 ? array[array.length - 1] : null;
   }
 
   function leafletToGeodesy(latLng) {
@@ -156,40 +138,57 @@
     },
   };
 
-  this.analyzeTracks = (dataset, options) => {
+  this.analyzeTracks = function(dataset, options) {
     const opts = { ...analyzeTracksOptions, ...options };
 
-    self.indexMap = {};
-    self.nextIndex = 0;
-    self.filteredDupes = 0;
-    self.filteredOutOfRange = 0;
+    const indexMap = {};
+    let nextIndex = 0;
 
-    const trackPoints = [];
-    const addTrackPoint = (dataPoint) => {
-      return trackPoints.push(dataPoint) - 1;
+    // Use simple integers as track IDs.
+    const hashToIdx = (hash) => {
+      if (!indexMap.hasOwnProperty(hash)) {
+        indexMap[hash] = [ nextIndex++ ];
+      }
+      // Latest track-index for the participant.
+      return back(indexMap[hash]);
     };
 
+    // For split-tracks we can have multiple indexes per participant.
+    const newIdxForHash = (hash) => {
+      if (!indexMap.hasOwnProperty(hash)) {
+        console.error("Invalid use of newIdxForHash()");
+      }
+      indexMap[hash].push(nextIndex++);
+      return back(indexMap[hash]);
+    }
+
+    let filteredDupes = 0;
+    let filteredOutOfRange = 0;
+
+    const trackPoints = [];
     const trackPointTracks = [];
+
     for (const snapshot in dataset) {
       for (const participant in dataset[snapshot]) {
         const dataPoint = importApiVersion2DataPoint(dataset[snapshot][participant]);
 
         if (opts.coordFilter(dataPoint)) {
-          self.filteredOutOfRange += 1;
+          filteredOutOfRange += 1;
           continue;
         }
 
         const idx = hashToIdx(participant);
         if (trackPointTracks.length <= idx) {
-          trackPointTracks[idx] = [ addTrackPoint(dataPoint) ];
+          trackPoints.push(dataPoint);
+          trackPointTracks[idx] = [ trackPoints.length - 1 ];
           continue;
         }
 
         const latest = trackPoints[back(trackPointTracks[idx])];
         if (isDuplicate(latest, dataPoint)) {
-          // Extend the duration of ths latest data-point.
+          // Extend the duration of the latest data-point.
           latest.last_stamp = dataPoint.last_stamp;
-          self.filteredDupes += 1;
+          filteredDupes += 1;
           continue;
         }
 
@@ -198,18 +197,23 @@
           if (splitTrack(vector, opts.splitConditions)) {
             // Drop the vector and create a new track for this data-point.
             const idx = newIdxForHash(participant);
-            trackPointTracks[idx] = [ addTrackPoint(dataPoint) ];
+            trackPoints.push(dataPoint);
+            trackPointTracks[idx] = [ trackPoints.length - 1 ];
           }
           else {
             // Add vector to the latest data-point in the track and push the new
             // data-point on top.
             latest.direction = vector.direction;
             latest.next = dataPoint;
-            trackPointTracks[idx].push(addTrackPoint(dataPoint));
+            trackPoints.push(dataPoint);
+            trackPointTracks[idx].push(trackPoints.length - 1);
           }
         }
       }
     }
+
+    console.log("Filtered", filteredDupes, "duplicate data points");
+    console.log("Filtered", filteredOutOfRange, "data points outside area of interest");
 
     // Return a flat array of data-points from all relevant tracks sorted by
     // ascending timestamps. For convenience we omit the last data-point in each
@@ -446,7 +450,7 @@
     skipSamplingThreshold: 0,
   };
 
-  this.detectCircles = (dataPoints, options) => {
+  this.detectCircles = function(dataPoints, options) {
     const opts = { ...detectCirclesOptions, ...options };
 
     for (const dataPoint of dataPoints) {
@@ -553,7 +557,6 @@
     return snakeOrigins;
   }; // CriticalSnake.PostProcessor.associateSnakes()
 
-
   function allSnakesIn(circles, indexes) {
     return Array.from(indexes).reduce((snakes, circleIdx) => {
       for (const snakeId of circles[circleIdx].snakes) {
@@ -635,7 +638,7 @@
     }
 
     return segments;
-  }
+  } // // CriticalSnake.PostProcessor.populateTrackSegments
 
   this.getTimeRange = function(circles) {
     // Find indexes of all circles that are associated with a snke.
@@ -646,11 +649,6 @@
       end: maxLastStamp(circles, snakeIdxs),
     };
   }; // CriticalSnake.PostProcessor.getTimeRange()
-
-  this.indexMap = {};
-  this.nextIndex = 0;
-  this.filteredDupes = 0;
-  this.filteredOutOfRange = 0;
 
 }; // CriticalSnake.PostProcessor
 

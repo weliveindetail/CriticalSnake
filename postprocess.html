@@ -87,9 +87,6 @@
       console.log("Data-points:", dataPoints);
       console.log("Analyzing tracks took:", Date.now() - analyzeTracksBegin, "ms");
 
-      console.log("Filtered", PostProcessor.filteredDupes, "duplicate data points");
-      console.log("Filtered", PostProcessor.filteredOutOfRange, "data points outside area of interest");
-
       const detectCirclesBegin = Date.now();
       const circles = PostProcessor.detectCircles(dataPoints);
       console.log("Circles:", circles);
