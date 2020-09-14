@@ -1,16 +1,34 @@
+const defaultOptions = {
+  showStats: true,
+  showControls: true,
+  showZoom: true,
+}
 
-function createBikeMap(L, baseLayer, options) {
+function createBikeMap(L, options) {
+  const opts = { ...defaultOptions, ...options };
+
   let bikeMap = new L.map('osm-map', {
     renderer: L.canvas(),
     zoomControl: false,
   });
+
   bikeMap.setView([52.5219,13.4045], 13);
-  bikeMap.addLayer(baseLayer);
 
-  // Customization points
-  bikeMap.createMarker = (loc) => { return L.marker(loc.coord); };
+  const wiki = {
+    url: "https://foundation.wikimedia.org/wiki/Maps_Terms_of_Use",
+    title: "Wikimedia maps",
+  };
+  const osm = {
+    url: "http://osm.org/copyright",
+    title: "OpenStreetMap",
+  };
 
-  if (options.showStats) {
+  bikeMap.addLayer(L.tileLayer(
+    'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
+    { attribution: `<a href="${wiki.url}">${wiki.title}</a> | ` +
+                   `&copy; <a href="${osm.url}">${osm.title}</a>` }));
+
+  if (opts.showStats) {
     L.Control.StatsView = L.Control.extend({
       onAdd: function(map) {
         let stats = L.DomUtil.create('label', 'leaflet-bar');
@@ -23,7 +41,7 @@ function createBikeMap(L, baseLayer, options) {
     });
   }
 
-  if (options.showControls) {
+  if (opts.showControls) {
     L.Control.PlaybackCtrls = L.Control.extend({
       onAdd: function(map) {
         let playbackCtrls = L.DomUtil.create('div', 'leaflet-bar');
@@ -69,38 +87,15 @@ function createBikeMap(L, baseLayer, options) {
     });
   }
 
-  if (options.showStats) {
+  if (opts.showStats) {
     (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
   }
-  if (options.showControls) {
+  if (opts.showControls) {
     (new L.Control.PlaybackCtrls({ position: 'bottomleft' })).addTo(bikeMap);
   }
-  if (options.showZoom) {
+  if (opts.showZoom) {
     (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
   }
-
-//  bikeMap.participants = [];
-//  bikeMap.candidates = [];
-//  bikeMap.update = (newLocations) => {
-//    bikeMap.participants.forEach(marker => bikeMap.removeLayer(marker));
-//    bikeMap.candidates.forEach(marker => bikeMap.removeLayer(marker));
-//
-//    let participants = [];
-//    let candidates = [];
-//    for (let key in newLocations) {
-//      const loc = newLocations[key];
-//      const marker = bikeMap.createMarker(loc);
-//      marker.addTo(bikeMap);
-//      if (loc.snake == null)
-//        candidates.push(marker);
-//      else
-//        participants.push(marker);
-//    }
-//
-//    bikeMap.participants = participants;
-//    bikeMap.candidates = candidates;
-//    return participants.length + candidates.length;
-//  }
 
   bikeMap.browseButton = $("#browse");
   bikeMap.loadingLabel = $("#progress");
