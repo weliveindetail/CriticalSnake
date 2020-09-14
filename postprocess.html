@@ -256,7 +256,7 @@
       console.log("Associating snakes took:", Date.now() - associateSnakesBegin, "ms");
 
       const populateTrackSegmentsBegin = Date.now();
-      const segments = PostProcessor.populateTrackSegments(dataPoints, tracks, circles);
+      const segments = PostProcessor.populateTrackSegments(dataPoints, tracks, circles, 10);
       console.log("Segments:", segments);
       console.log("Populating track segments took:", Date.now() - populateTrackSegmentsBegin, "ms");
 

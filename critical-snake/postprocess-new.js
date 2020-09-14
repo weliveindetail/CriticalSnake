@@ -519,19 +519,32 @@
     return true;
   };
 
-  this.populateTrackSegments = function(dataPoints, tracks, circles) {
+  this.populateTrackSegments = function(dataPoints, tracks, circles, minSegmentLength) {
 
     const nextSegment = (track, begin) => {
       const indexes = (i) => dataPoints[track[i]].circles;
       const snakesBegin = allSnakesIn(circles, indexes(begin));
 
+      const lookaheadDataPointsInSnake = (base, lookahead) => {
+        const end = Math.min(base + lookahead, track.length);
+        let inSnake = 0;
+        for (let k = base; k < end; k++) {
+          const snakes = allSnakesIn(circles, indexes(k));
+          if (snakesEqual(snakesBegin, snakes))
+            inSnake += 1;
+        }
+        return lookahead * inSnake / (end - base);
+      };
+
       for (let i = begin + 1; i < track.length - 1; i++) {
-        const s1 = allSnakesIn(circles, indexes(i));
-        if (snakesEqual(snakesBegin, s1))
+        // Extend with the current segment as long as the current data-point
+        // or the majority of the upcoming data-points have the same snake
+        // signature.
+        const snakes = allSnakesIn(circles, indexes(i));
+        if (snakesEqual(snakesBegin, snakes))
           continue;
 
-        const s2 = allSnakesIn(circles, indexes(i + 1));
-        if (snakesEqual(snakesBegin, s2))
+        if (lookaheadDataPointsInSnake(i + 1, 5) > 2)
           continue;
 
         return [Array.from(snakesBegin), i];
@@ -545,14 +558,16 @@
       let trackPointIdx = 0;
       do {
         const [snakeIds, nextIdx] = nextSegment(track, trackPointIdx);
-        const segmentIdxs = track.slice(trackPointIdx, nextIdx + 1);
 
-        segments.push({
-          first_stamp: minFirstStamp(dataPoints, segmentIdxs),
-          last_stamp: maxLastStamp(dataPoints, segmentIdxs),
-          dataPointIdxs: segmentIdxs,
-          snakes: snakeIds,
-        });
+        if (nextIdx - trackPointIdx >= minSegmentLength) {
+          const segmentIdxs = track.slice(trackPointIdx, nextIdx + 1);
+          segments.push({
+            first_stamp: minFirstStamp(dataPoints, segmentIdxs),
+            last_stamp: maxLastStamp(dataPoints, segmentIdxs),
+            dataPointIdxs: segmentIdxs,
+            snakes: snakeIds,
+          });
+        }
 
         trackPointIdx = nextIdx;
       } while (trackPointIdx < track.length - 1);
