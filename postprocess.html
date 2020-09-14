@@ -144,7 +144,8 @@
         `📍🚲 ???`
       );
 
-      console.log("Rendering frame took:", Date.now() - refreshViewBegin, "ms");
+      const diff = Date.now() - refreshViewBegin;
+      console.log("Rendering frame took:", Math.round(diff / 10) * 10, "ms");
     }
 
     // ----------------------------------------------------
@@ -234,8 +235,8 @@
 
       for (const segment of segments.filter(startedAlready)) {
         // Draw non-associated track segments?
-        if (segment.snakes.length == 0)
-          continue;
+        //if (segment.snakes.length == 0)
+        //  continue;
 
         // Draw segment entirely or only the first number of data-points.
         const end = findEndIndex(segment);
@@ -253,8 +254,8 @@
     }
 
     function drawCircles(canvas, circles, stamp) {
-      const fullCircle = (c) => L.circle(c, {
-        color: colors(c.snakes.values().next().value),
+      const fullCircle = (c, id) => L.circle(c, {
+        color: colors(id),
         fillOpacity: 0.75,
         radius: 10 * Math.log2(c.dataPointIdxs.length),
         stroke: false,
@@ -272,8 +273,12 @@
       const inTime = (c) => c.first_stamp <= stamp && c.last_stamp >= stamp;
 
       for (const circle of circles.filter(c => inTime(c))) {
-        if (circle.snakes.size == 1) {
-          canvas.addLayer(fullCircle(circle));
+        if (circle.snakes.size == 0) {
+          canvas.addLayer(fullCircle(circle, null));
+        }
+        else if (circle.snakes.size == 1) {
+          const id = circle.snakes.values().next().value;
+          canvas.addLayer(fullCircle(circle, id));
         }
         else {
           let angle = rotatingCollisionCircles;
