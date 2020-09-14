@@ -4,6 +4,24 @@
 
     const self = this;
 
+    function numericRange(min, max) {
+      this.contains = (val) => min < val && max > val;
+      return this;
+    }
+
+    this.coordFilters = {
+      Berlin: function() {
+        const latRange = new numericRange(52.40, 52.61);
+        const lngRange = new numericRange(13.23, 13.56);
+        return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
+      },
+      Barcelona: function() {
+        const latRange = numericRange(41.26, 41.45);
+        const lngRange = numericRange(2.00, 2.29);
+        return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
+      },
+    };
+
     function importApiVersion2DataPoint(dataPoint) {
       const floatCoord = (oldFormat) => {
         let chars = oldFormat.toString().split('');
@@ -19,11 +37,11 @@
       };
     }
 
-    function splitTrack(vector) {
-      if (vector.duration > options.trackRestrictions.maxGapDuration) {
+    function splitTrack(vector, options) {
+      if (vector.duration > options.maxGapDuration) {
         return true;
       }
-      if (vector.distance > options.trackRestrictions.maxGapDistance) {
+      if (vector.distance > options.maxGapDistance) {
         return true;
       }
       return false;
@@ -87,8 +105,13 @@
     return false;
   }
 
-  function isRelevantTrack(dataPoints, trackIdxs) {
-    if (trackIdxs.length < options.trackRestrictions.minDataPoints)
+  function isRelevantTrack(dataPoints, trackIdxs, options) {
+    if (trackIdxs.length < options.minDataPoints)
+      return false;
+
+    const firstStamp = dataPoints[trackIdxs[0]].first_stamp;
+    const lastStamp = dataPoints[back(trackIdxs)].last_stamp;
+    if (lastStamp - firstStamp < options.minDuration)
       return false;
 
     let totalDistance = 0;
@@ -96,17 +119,12 @@
       const fromIdx = trackIdxs[i];
       const toIdx = trackIdxs[i + 1];
       totalDistance += geodesyDistance(dataPoints[fromIdx], dataPoints[toIdx]);
+
+      if (totalDistance > options.minDistance)
+        return true;
     }
 
-    if (totalDistance < options.trackRestrictions.minTotalDistance)
-      return false;
-
-    const firstStamp = minFirstStamp(dataPoints, trackIdxs);
-    const lastStamp = maxLastStamp(dataPoints, trackIdxs);
-    if (lastStamp - firstStamp < options.trackRestrictions.minTotalDuration)
-      return false;
-
-    return true;
+    return false;
   }
 
   function reindexTracks(pool, perTrackIdxs) {
@@ -125,7 +143,22 @@
     ];
   }
 
-  this.analyzeTracks = (dataset) => {
+  const analyzeTracksOptions = {
+    coordFilter: this.coordFilters.Berlin(),
+    trackFilter: {
+      minDataPoints: 8,
+      minDistance: 1000,
+      minDuration: 5 * 60 * 1000,
+    },
+    splitConditions : {
+      maxGapDuration: 5 * 60 * 1000,
+      maxGapDistance: 1000,
+    },
+  };
+
+  this.analyzeTracks = (dataset, options) => {
+    const opts = { ...analyzeTracksOptions, ...options };
+
     self.indexMap = {};
     self.nextIndex = 0;
     self.filteredDupes = 0;
@@ -141,7 +174,7 @@
       for (const participant in dataset[snapshot]) {
         const dataPoint = importApiVersion2DataPoint(dataset[snapshot][participant]);
 
-        if (!options.coordFilter([ dataPoint.lat, dataPoint.lng ])) {
+        if (opts.coordFilter(dataPoint)) {
           self.filteredOutOfRange += 1;
           continue;
         }
@@ -162,7 +195,7 @@
 
         const vector = calculateVector(latest, dataPoint);
         if (vector) {
-          if (splitTrack(vector)) {
+          if (splitTrack(vector, opts.splitConditions)) {
             // Drop the vector and create a new track for this data-point.
             const idx = newIdxForHash(participant);
             trackPointTracks[idx] = [ addTrackPoint(dataPoint) ];
@@ -181,11 +214,16 @@
     // Return a flat array of data-points from all relevant tracks sorted by
     // ascending timestamps. For convenience we omit the last data-point in each
     // track, because it has no "next" property.
-    const relevantTrackPointTracks =
-        trackPointTracks.filter(indexes => isRelevantTrack(trackPoints, indexes))
-                        .map(track => track.slice(0, -1));
+    const trackFilter = (indexes) => isRelevantTrack(trackPoints, indexes,
+                                                     opts.trackFilter);
+    const descendingLengthOrder = (trackA, trackB) => trackB.length - trackA.length;
+    const dropEveryLastDataPoint = (track) => track.slice(0, -1);
 
-    return reindexTracks(trackPoints, relevantTrackPointTracks);
+    const relTrackPointTracks = trackPointTracks.filter(trackFilter)
+                                                .sort(descendingLengthOrder)
+                                                .map(dropEveryLastDataPoint);
+
+    return reindexTracks(trackPoints, relTrackPointTracks);
   };
   // CriticalSnake.PostProcessor.analyzeTracks()
 
@@ -378,42 +416,56 @@
     return circleToJoin;
   }
 
-  function createOrJoinCircle(matches, circles, dataPoints) {
-    const minute = 60 * 1000;
+  function createOrJoinCircle(matches, circles, dataPoints, options) {
     const latLng = averageLatLng(dataPoints, matches);
-    const stamp = averageFirstStamp(dataPoints, matches).getTime();
+    const stamp = averageFirstStamp(dataPoints, matches);
+    const inTime = (c) => {
+      return c.first_stamp - stamp > -options.tolerance.timeBefore &&
+             c.last_stamp - stamp < options.tolerance.timeAfter
+    };
 
-    for (let i = circles.length - 1; i >= 0; i--) {
-      if (Math.abs(stamp - circles[i].first_stamp.getTime()) < 5 * minute)
-        if (geodesyDistance(circles[i], latLng) < 100) {
-          return joinCircle(circles[i], matches, dataPoints);
-        }
+    for (const circle of circles.filter(inTime)) {
+      if (geodesyDistance(circle, latLng) < options.samplePointDist) {
+        return joinCircle(circle, matches, dataPoints);
+      }
     }
 
     return createCircle(latLng, matches, circles, dataPoints);
   }
 
-  this.detectCircles = (dataPoints) => {
+  const detectCirclesOptions = {
+    tolerance: {
+      latitude: 0.001,
+      longitude: 0.002,
+      timeBefore: 5 * 60 * 1000,
+      timeAfter: 10 * 60 * 1000,
+      direction: 45,
+    },
+    samplePointDist: 100,
+    minDataPointMatches: 5,
+  };
+
+  this.detectCircles = (dataPoints, options) => {
+    const opts = { ...detectCirclesOptions, ...options };
+
     for (const dataPoint of dataPoints) {
       dataPoint.circles = new Set();
     }
 
     const pointsInTime = ConvexEnvelopeSearch(dataPoints, binarySearch);
-
-    const minute = 60 * 1000;
     pointsInTime.addDimension({
-      lowerBoundTolerance: -5 * minute,
-      upperBoundTolerance: 10 * minute,
+      lowerBoundTolerance: -opts.tolerance.timeBefore,
+      upperBoundTolerance: opts.tolerance.timeAfter,
       value: (item) => item.first_stamp.getTime(),
     });
     pointsInTime.addDimension({
-      lowerBoundTolerance: -0.001,
-      upperBoundTolerance: 0.001,
+      lowerBoundTolerance: -opts.tolerance.latitude,
+      upperBoundTolerance: opts.tolerance.latitude,
       value: (item) => item.lat,
     });
     pointsInTime.addDimension({
-      lowerBoundTolerance: -0.002,
-      upperBoundTolerance: 0.002,
+      lowerBoundTolerance: -opts.tolerance.longitude,
+      upperBoundTolerance: opts.tolerance.longitude,
       value: (item) => item.lng,
     });
 
@@ -424,17 +476,17 @@
       if (p.circles.size > 0)
         continue;
 
-      const samplePoints = interpolateLinear(p, p.next, 100);
+      const samplePoints = interpolateLinear(p, p.next, opts.samplePointDist);
       for (const samplePoint of samplePoints.slice(0, -1)) {
         const undirectedMatches = pointsInTime.itemsInEnvelope(samplePoint);
         const matches = undirectedMatches.filter(idx => {
-          return dirDiff(p, dataPoints[idx]) < 45;
+          return dirDiff(p, dataPoints[idx]) < opts.tolerance.direction;
         });
 
-        if (matches.length < 5)
+        if (matches.length < opts.minDataPointMatches)
           continue;
 
-        const circle = createOrJoinCircle(matches, circles, dataPoints);
+        const circle = createOrJoinCircle(matches, circles, dataPoints, opts);
         for (const idx of matches) {
           dataPoints[idx].circles.add(circle.id);
         }
@@ -519,21 +571,27 @@
     return true;
   };
 
-  this.populateTrackSegments = function(dataPoints, tracks, circles, minSegmentLength) {
+  const populateTrackSegmentsOptions = {
+    minSegmentLength: 10,
+    bridgeGapsLookahead: 5,
+  };
+
+  this.populateTrackSegments = function(dataPoints, tracks, circles, options) {
+    const opts = { ...populateTrackSegmentsOptions, ...options };
 
     const nextSegment = (track, begin) => {
       const indexes = (i) => dataPoints[track[i]].circles;
       const snakesBegin = allSnakesIn(circles, indexes(begin));
 
-      const lookaheadDataPointsInSnake = (base, lookahead) => {
-        const end = Math.min(base + lookahead, track.length);
+      const nextDataPointsMajorityInSnake = (first, count) => {
+        const end = Math.min(first + count, track.length);
         let inSnake = 0;
-        for (let k = base; k < end; k++) {
+        for (let k = first; k < end; k++) {
           const snakes = allSnakesIn(circles, indexes(k));
           if (snakesEqual(snakesBegin, snakes))
             inSnake += 1;
         }
-        return lookahead * inSnake / (end - base);
+        return inSnake / (end - first) >= 0.5;
       };
 
       for (let i = begin + 1; i < track.length - 1; i++) {
@@ -544,7 +602,7 @@
         if (snakesEqual(snakesBegin, snakes))
           continue;
 
-        if (lookaheadDataPointsInSnake(i + 1, 5) > 2)
+        if (nextDataPointsMajorityInSnake(i + 1, opts.bridgeGapsLookahead))
           continue;
 
         return [Array.from(snakesBegin), i];
@@ -559,7 +617,9 @@
       do {
         const [snakeIds, nextIdx] = nextSegment(track, trackPointIdx);
 
-        if (nextIdx - trackPointIdx >= minSegmentLength) {
+        // nextIdx is the data-point where this segment ends and the next
+        // segment starts.
+        if (nextIdx - trackPointIdx + 1 >= opts.minSegmentLength) {
           const segmentIdxs = track.slice(trackPointIdx, nextIdx + 1);
           segments.push({
             first_stamp: minFirstStamp(dataPoints, segmentIdxs),

@@ -256,7 +256,7 @@
       console.log("Associating snakes took:", Date.now() - associateSnakesBegin, "ms");
 
       const populateTrackSegmentsBegin = Date.now();
-      const segments = PostProcessor.populateTrackSegments(dataPoints, tracks, circles, 10);
+      const segments = PostProcessor.populateTrackSegments(dataPoints, tracks, circles);
       console.log("Segments:", segments);
       console.log("Populating track segments took:", Date.now() - populateTrackSegmentsBegin, "ms");
 
@@ -441,6 +441,7 @@
         return seg.dataPointIdxs.findIndex(idx => didNotStartYet(idx));
       };
 
+      let count = 0;
       for (const segment of dataset.segments.filter(startedAlready)) {
         // Draw non-associated track segments?
         if (segment.snakes.length == 0)
@@ -452,6 +453,7 @@
                                   : segment.dataPointIdxs.slice(0, end);
 
         for (const snakeId of segment.snakes) {
+          count++;
           trackShadows.addLayer(
               L.polyline(coordIdxs.map(idx => dataset.dataPoints[idx]), {
                 color: colors(snakeId),
@@ -459,6 +461,7 @@
               }));
         }
       }
+      //console.log("Total polyines in frame:", count);
 
 
       const options = {
