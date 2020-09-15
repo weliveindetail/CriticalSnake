@@ -35,11 +35,10 @@
     let playbackDataset = null;
     bikeMap.playbackButton.click(() => {
       if (playbackDataset) {
-        if (isRunning(bikeMap.playbackButton)) {
+        if (isRunning())
           pause();
-        } else {
+        else
           resume();
-        }
       }
     });
 
@@ -49,6 +48,12 @@
         playbackFrameIdx = parseInt(bikeMap.historySlider.val());
         refreshView(playbackFrameIdx);
       }
+    });
+
+    let playbackFPS = 15;
+    $(document).on("change", bikeMap.fpsInput, () => {
+      playbackFPS = parseInt(bikeMap.fpsInput.val());
+      console.log("FPS changed to", playbackFPS);
     });
 
     bikeMap.browseButton.change(function () {
@@ -124,6 +129,8 @@
       bikeMap.statsLabel.show();
       bikeMap.historySlider.show();
       bikeMap.playbackButton.show();
+      bikeMap.fpsLabel.show();
+      bikeMap.fpsInput.show();
     }
 
     function refreshView(frameIdx) {
@@ -150,40 +157,45 @@
 
     // ----------------------------------------------------
 
-    let frameTimer = null;
     let rotatingCollisionCircles = 0;
-    const testFPS = 15;
+    const drawFrameAction = () => {
+      rotatingCollisionCircles += playbackFPS;
+      switch (playbackFrameIdx) {
+        case 0:
+          refreshView(playbackFrameIdx);
+          playbackFrameIdx += 1;
+          break;
+        case 500:
+          refreshView(playbackFrameIdx);
+          bikeMap.playbackButton.val("▶");
+          playbackFrameIdx = 0;
+          break;
+        default:
+          refreshView(playbackFrameIdx);
+          playbackFrameIdx += 1;
+          break;
+      }
+    };
+
     function resume() {
-      console.log("Rendering", testFPS, "FPS (", 1000 / testFPS, "ms per frame)");
+      console.log("Rendering", playbackFPS, "FPS (", 1000 / playbackFPS, "ms per frame)");
       bikeMap.playbackButton.val("||");
-      frameTimer = setInterval(() => {
-        rotatingCollisionCircles += testFPS;
-        switch (playbackFrameIdx) {
-          case 0:
-            refreshView(playbackFrameIdx);
-            playbackFrameIdx += 1;
-            break;
-          case 500:
-            clearTimeout(frameTimer);
-            refreshView(playbackFrameIdx);
-            bikeMap.playbackButton.val("▶");
-            playbackFrameIdx = 0;
-            break;
-          default:
-            refreshView(playbackFrameIdx);
-            playbackFrameIdx += 1;
-            break;
-        }
-      }, 1000 / testFPS);
+
+      const nextFrameAction = () => {
+        drawFrameAction();
+        if (isRunning())
+          setTimeout(nextFrameAction, 1000 / playbackFPS);
+      };
+
+      setTimeout(nextFrameAction, 1000 / playbackFPS);
     }
 
     function pause() {
       bikeMap.playbackButton.val("▶");
-      clearTimeout(frameTimer);
     }
 
-    function isRunning(playbackButton) {
-      return playbackButton.val() != "▶";
+    function isRunning() {
+      return bikeMap.playbackButton.val() != "▶";
     }
 
     // ----------------------------------------------------
@@ -273,20 +285,22 @@
       const inTime = (c) => c.first_stamp <= stamp && c.last_stamp >= stamp;
 
       for (const circle of circles.filter(c => inTime(c))) {
-        if (circle.snakes.size == 0) {
-          canvas.addLayer(fullCircle(circle, null));
-        }
-        else if (circle.snakes.size == 1) {
-          const id = circle.snakes.values().next().value;
-          canvas.addLayer(fullCircle(circle, id));
-        }
-        else {
-          let angle = rotatingCollisionCircles;
-          const arcSize = 360 / circle.snakes.size;
-          for (const id of circle.snakes) {
-            canvas.addLayer(semiCircle(circle, id, angle, angle + arcSize));
-            angle += arcSize;
-          }
+        switch (circle.snakes.size) {
+          case 0:
+            canvas.addLayer(fullCircle(circle, null));
+            break;
+          case 1:
+            const id = circle.snakes.values().next().value;
+            canvas.addLayer(fullCircle(circle, id));
+            break;
+          default:
+            let angle = rotatingCollisionCircles;
+            const arcSize = 360 / circle.snakes.size;
+            for (const id of circle.snakes) {
+              canvas.addLayer(semiCircle(circle, id, angle, angle + arcSize));
+              angle += arcSize;
+            }
+            break;
         }
       }
     }

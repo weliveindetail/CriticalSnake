@@ -1,8 +1,6 @@
 (function(CriticalSnake) {
 
-  CriticalSnake.PostProcessor = function(options) {
-
-  const self = this;
+CriticalSnake.PostProcessor = function(options) {
 
   function numericRange(min, max) {
     this.contains = (val) => min < val && max > val;

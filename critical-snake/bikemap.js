@@ -70,13 +70,35 @@ function createBikeMap(L, options) {
         slider.id = "history";
         slider.style.display = "none";
 
+        let fpsLabel = L.DomUtil.create('label', '', playbackCtrls);
+        fpsLabel.innerHTML = "FPS:";
+        fpsLabel.id = "fpsLabel";
+        fpsLabel.htmlFor = "fpsInput";
+        fpsLabel.style.padding = "2px 0.33rem 0px 1rem";
+        fpsLabel.style.display = "none";
+
+        let fpsInput = L.DomUtil.create('input', '', playbackCtrls);
+        fpsInput.type = "number";
+        fpsInput.id = "fpsInput";
+        fpsInput.min = "1";
+        fpsInput.max = "100";
+        fpsInput.value = "15";
+        fpsInput.style.textAlign = "right";
+        fpsInput.style.display = "none";
+
         L.DomEvent.on(playbackCtrls, 'mouseover', () => {
           map.dragging.disable();
+          map.doubleClickZoom.disable();
         }, this);
 
         L.DomEvent.on(playbackCtrls, 'mouseout', () => {
           map.dragging.enable();
+          map.doubleClickZoom.enable();
         }, this);
+
+        L.DomEvent.on(fpsInput, 'keydown', (e) => {
+          e.preventDefault();
+        });
 
         return playbackCtrls;
       },
@@ -102,6 +124,8 @@ function createBikeMap(L, options) {
   bikeMap.historySlider = $("#history");
   bikeMap.playbackButton = $("#playback");
   bikeMap.statsLabel = $("#stats");
+  bikeMap.fpsLabel = $("#fpsLabel");
+  bikeMap.fpsInput = $("#fpsInput");
 
   return bikeMap;
 }
