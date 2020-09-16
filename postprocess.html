@@ -14,6 +14,7 @@
   <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
   <script src="3rd-party/geodesy11/latlon-spherical.min.js"></script>
   <script src="3rd-party/lzstring14/lz-string.min.js"></script>
+  <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
 
   <script src="critical-snake/bikemap.js"></script>
   <script src="critical-snake/postprocess-new.js"></script>
@@ -108,6 +109,7 @@
           circles: playbackDataset.circles,
           segments: playbackDataset.segments,
         });
+
         bikeMap.loadingGroup.hide();
         bikeMap.playbackGroup.show();
       }, 10);
@@ -166,19 +168,9 @@
       const compressed = LZString.compressToUTF16(text);
       console.log("Compressed size is:", kilobyte(compressed), "KB");
 
-      const pom = document.createElement('a');
-      pom.setAttribute('href', 'data:text/plain;charset=utf-16,' + compressed);
-      pom.setAttribute('download', filename);
-
-      if (document.createEvent) {
-        const event = document.createEvent('MouseEvents');
-        event.initEvent('click', true, true);
-        pom.dispatchEvent(event);
-      }
-      else {
-        pom.click();
-      }
-  }
+      const blob = new Blob([compressed], {type: "text/plain;charset=utf-16"});
+      saveAs(blob, filename);
+    }
 
     function refreshView(frameIdx) {
       const refreshViewBegin = Date.now();
