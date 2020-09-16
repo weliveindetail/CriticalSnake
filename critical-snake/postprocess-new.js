@@ -35,16 +35,6 @@ CriticalSnake.PostProcessor = function(options) {
     };
   }
 
-  function splitTrack(vector, options) {
-    if (vector.duration > options.maxGapDuration) {
-      return true;
-    }
-    if (vector.distance > options.maxGapDistance) {
-      return true;
-    }
-    return false;
-  }
-
   function back(array) {
     return array.length > 0 ? array[array.length - 1] : null;
   }
@@ -59,22 +49,6 @@ CriticalSnake.PostProcessor = function(options) {
 
   function geodesyBearing(c1, c2) {
     return leafletToGeodesy(c1).bearingTo(leafletToGeodesy(c2));
-  }
-
-  // The vector is the transition info between the last and the current
-  // data-point in the track.
-  function calculateVector(latest, next) {
-    if (latest.last_stamp > next.first_stamp) {
-      console.error("Invalid dataset ordering: timestamp", latest.last_stamp,
-                    "> timestamp", next.first_stamp);
-      return null;
-    }
-
-    return {
-      direction: geodesyBearing(latest, next),
-      distance: geodesyDistance(latest, next),
-      duration: next.first_stamp - latest.last_stamp
-    }
   }
 
   function isDuplicate(latest, next) {
@@ -107,6 +81,16 @@ CriticalSnake.PostProcessor = function(options) {
     return false;
   }
 
+  function splitTrack(latest, next, options) {
+    if (next.first_stamp - latest.last_stamp > options.maxGapDuration) {
+      return true;
+    }
+    if (geodesyDistance(latest, next) > options.maxGapDistance) {
+      return true;
+    }
+    return false;
+  }
+
   function reindexTracks(pool, perTrackPoolIdxs) {
     // Indexes into the pool for all our tracks, sorted by ascending timestamps.
     const sortedPoolIdxs = perTrackPoolIdxs.flat();
@@ -131,7 +115,11 @@ CriticalSnake.PostProcessor = function(options) {
       for (let i = 1; i < oldTrackIdxs.length; i++) {
         const oldIdx = oldTrackIdxs[i];
         const newIdx = lookup[oldIdx];
-        dataPoints[back(newTrackIdxs)].nextIdx = newIdx;
+
+        const predInTrack = dataPoints[back(newTrackIdxs)];
+        predInTrack.direction = geodesyBearing(predInTrack, dataPoints[newIdx]);
+        predInTrack.nextIdx = newIdx;
+
         newTrackIdxs.push(newIdx);
       }
       dataPoints[back(newTrackIdxs)].nextIdx = null;
@@ -181,8 +169,8 @@ CriticalSnake.PostProcessor = function(options) {
     let filteredDupes = 0;
     let filteredOutOfRange = 0;
 
-    const trackPoints = [];
-    const trackPointTracks = [];
+    const pool = [];
+    const perTrackPoolIdxs = [];
 
     for (const snapshot in dataset) {
       for (const participant in dataset[snapshot]) {
@@ -193,37 +181,32 @@ CriticalSnake.PostProcessor = function(options) {
           continue;
         }
 
-        const idx = hashToIdx(participant);
-        if (trackPointTracks.length <= idx) {
-          trackPoints.push(dataPoint);
-          trackPointTracks[idx] = [ trackPoints.length - 1 ];
+        const trackIdx = hashToIdx(participant);
+        if (perTrackPoolIdxs.length <= trackIdx) {
+          perTrackPoolIdxs[trackIdx] = [ pool.length ];
+          pool.push(dataPoint);
           continue;
         }
 
-        const latest = trackPoints[back(trackPointTracks[idx])];
+        const latest = pool[back(perTrackPoolIdxs[trackIdx])];
         if (isDuplicate(latest, dataPoint)) {
-          // Extend the duration of the latest data-point.
+          // Extend the duration of the latest data-point. Don't add the
+          // current data-point to the pool.
           latest.last_stamp = dataPoint.last_stamp;
           filteredDupes += 1;
           continue;
         }
 
-        const vector = calculateVector(latest, dataPoint);
-        if (vector) {
-          if (splitTrack(vector, opts.splitConditions)) {
-            // Drop the vector and create a new track for this data-point.
-            const idx = newIdxForHash(participant);
-            trackPoints.push(dataPoint);
-            trackPointTracks[idx] = [ trackPoints.length - 1 ];
-          }
-          else {
-            // In the last dataPoint of the track, store the direction that
-            // leads to the current dataPoint. Then add the dataPoint to the
-            // track and the pool.
-            latest.direction = vector.direction;
-            trackPointTracks[idx].push(trackPoints.length);
-            trackPoints.push(dataPoint);
-          }
+        if (splitTrack(latest, dataPoint, opts.splitConditions)) {
+          // Create a new track starting with this data-point.
+          const newTrackIdx = newIdxForHash(participant);
+          perTrackPoolIdxs[newTrackIdx] = [ pool.length ];
+          pool.push(dataPoint);
+        }
+        else {
+          // Add the dataPoint to the track and the pool.
+          perTrackPoolIdxs[trackIdx].push(pool.length);
+          pool.push(dataPoint);
         }
       }
     }
@@ -231,14 +214,14 @@ CriticalSnake.PostProcessor = function(options) {
     console.log("Filtered", filteredDupes, "duplicate data points");
     console.log("Filtered", filteredOutOfRange, "data points outside area of interest");
 
-    const trackFilter = (indexes) => isRelevantTrack(trackPoints, indexes,
+    const trackFilter = (indexes) => isRelevantTrack(pool, indexes,
                                                      opts.trackFilter);
     const descendingLengthOrder = (trackA, trackB) => trackB.length - trackA.length;
 
-    const relTrackPointTracks = trackPointTracks.filter(trackFilter)
+    const relTrackPointTracks = perTrackPoolIdxs.filter(trackFilter)
                                                 .sort(descendingLengthOrder);
 
-    return reindexTracks(trackPoints, relTrackPointTracks);
+    return reindexTracks(pool, relTrackPointTracks);
   };
   // CriticalSnake.PostProcessor.analyzeTracks()
 

@@ -30,6 +30,10 @@
 
     const params = parseUrlParams(window.location.href);
     const bikeMap = createBikeMap(L);
+    bikeMap.browseGroup.show();
+    bikeMap.loadingGroup.hide();
+    bikeMap.playbackGroup.hide();
+    bikeMap.statsLabel.hide();
 
     let playbackFrameIdx = 0;
     let playbackDataset = null;
@@ -56,11 +60,11 @@
       console.log("FPS changed to", playbackFPS);
     });
 
-    bikeMap.browseButton.change(function () {
+    let playbackRecording = "test";
+    bikeMap.browseButton.change(function() {
       // Validate selection and set visual indication for the loading progress.
-      bikeMap.browseButton.hide();
-      bikeMap.loadingLabel.text("Loading..");
-      bikeMap.loadingLabel.show();
+      bikeMap.browseGroup.hide();
+      bikeMap.loadingGroup.show();
 
       if (this.files.length == 0)
         return;
@@ -72,11 +76,16 @@
       $(reader).on('load', (event) => {
         try {
           loadRecording(event.target.result);
+          playbackRecording = this.files[0].name;
+          bikeMap.playbackGroup.show();
+          bikeMap.statsLabel.show();
         }
         catch (ex) {
+          bikeMap.browseGroup.show();
           console.error("JSON parsing for file", this.files[0].name,
                         "failed with", ex);
         }
+        bikeMap.loadingGroup.hide();
       });
       reader.readAsText(this.files[0]);
     });
@@ -124,13 +133,6 @@
 
       playbackFrameIdx = 0;
       refreshView(playbackFrameIdx);
-
-      bikeMap.loadingLabel.hide();
-      bikeMap.statsLabel.show();
-      bikeMap.historySlider.show();
-      bikeMap.playbackButton.show();
-      bikeMap.fpsLabel.show();
-      bikeMap.fpsInput.show();
     }
 
     function refreshView(frameIdx) {
@@ -225,8 +227,8 @@
         "#c90002", // red
         "#1b3d9f", // blue
         "#ff0099", // pink
-        "#8b00ff", // violett
         "#005214", // green
+        "#8b00ff", // violett
       ];
 
       if (snakeId >= 0 && snakeId < snakeColors.length)

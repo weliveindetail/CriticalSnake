@@ -1,18 +1,15 @@
 const defaultOptions = {
-  showStats: true,
-  showControls: true,
-  showZoom: true,
+  center: [52.5219, 13.4045],
+  zoom: 13,
 }
 
 function createBikeMap(L, options) {
-  const opts = { ...defaultOptions, ...options };
-
-  let bikeMap = new L.map('osm-map', {
+  const bikeMap = new L.map('osm-map', {
+    ...defaultOptions,
+    ...options,
     renderer: L.canvas(),
     zoomControl: false,
   });
-
-  bikeMap.setView([52.5219,13.4045], 13);
 
   const wiki = {
     url: "https://foundation.wikimedia.org/wiki/Maps_Terms_of_Use",
@@ -28,104 +25,142 @@ function createBikeMap(L, options) {
     { attribution: `<a href="${wiki.url}">${wiki.title}</a> | ` +
                    `&copy; <a href="${osm.url}">${osm.title}</a>` }));
 
-  if (opts.showStats) {
-    L.Control.StatsView = L.Control.extend({
-      onAdd: function(map) {
-        let stats = L.DomUtil.create('label', 'leaflet-bar');
-        stats.id = "stats";
-        stats.style.padding = "3px 8px";
-        stats.style.backgroundColor = "#fff";
-        stats.style.display = "none";
-        return stats;
-      }
-    });
-  }
+  const controlGroups = [];
 
-  if (opts.showControls) {
-    L.Control.PlaybackCtrls = L.Control.extend({
-      onAdd: function(map) {
-        let playbackCtrls = L.DomUtil.create('div', 'leaflet-bar');
-        playbackCtrls.style.display = "flex";
-        playbackCtrls.style.backgroundColor = "#fff";
-        playbackCtrls.style.padding = "5px";
+  L.Control.StatsView = L.Control.extend({
+    onAdd: function() {
+      const statsLabel = L.DomUtil.create('label', 'leaflet-bar');
+      statsLabel.id = "statsLabel";
+      statsLabel.style.padding = "3px 8px";
+      statsLabel.style.backgroundColor = "#fff";
+      controlGroups.push(statsLabel);
+      return statsLabel;
+    }
+  });
 
-        let browse = L.DomUtil.create('input', '', playbackCtrls);
-        browse.type = "file";
-        browse.id = "browse";
-        browse.style.border = "0";
+  L.Control.BrowseGroup = L.Control.extend({
+    onAdd: function() {
+      const browseGroup = L.DomUtil.create('div', 'leaflet-bar');
+      browseGroup.id = "browseGroup";
+      browseGroup.style.display = "flex";
+      browseGroup.style.backgroundColor = "#fff";
+      browseGroup.style.padding = "5px";
 
-        let progress = L.DomUtil.create('label', '', playbackCtrls);
-        progress.id = "progress";
-        progress.style.display = "none";
+      const browseButton = L.DomUtil.create('input', '', browseGroup);
+      browseButton.id = "browseButton";
+      browseButton.type = "file";
+      browseButton.style.border = "0";
 
-        let playback = L.DomUtil.create('input', '', playbackCtrls);
-        playback.type = "button";
-        playback.id = "playback";
-        playback.value = "▶";
-        playback.style.display = "none";
-        playback.style.border = "0";
+      controlGroups.push(browseGroup);
+      return browseGroup;
+    },
+  });
 
-        let slider = L.DomUtil.create('input', '', playbackCtrls);
-        slider.type = "range";
-        slider.id = "history";
-        slider.style.display = "none";
+  L.Control.LoadingGroup = L.Control.extend({
+    onAdd: function() {
+      const loadingGroup = L.DomUtil.create('div', 'leaflet-bar');
+      loadingGroup.id = "loadingGroup";
+      loadingGroup.style.display = "flex";
+      loadingGroup.style.backgroundColor = "#fff";
+      loadingGroup.style.padding = "5px";
 
-        let fpsLabel = L.DomUtil.create('label', '', playbackCtrls);
-        fpsLabel.innerHTML = "FPS:";
-        fpsLabel.id = "fpsLabel";
-        fpsLabel.htmlFor = "fpsInput";
-        fpsLabel.style.padding = "2px 0.33rem 0px 1rem";
-        fpsLabel.style.display = "none";
+      const loadingSpinner = L.DomUtil.create('img', '', loadingGroup);
+      loadingSpinner.id = "loadingSpinner";
+      loadingSpinner.src = "img/spinner-icon-gif-29.gif";
+      loadingSpinner.style.height = "1.5em";
 
-        let fpsInput = L.DomUtil.create('input', '', playbackCtrls);
-        fpsInput.type = "number";
-        fpsInput.id = "fpsInput";
-        fpsInput.min = "1";
-        fpsInput.max = "100";
-        fpsInput.value = "15";
-        fpsInput.style.textAlign = "right";
-        fpsInput.style.display = "none";
+      const loadingLabel = L.DomUtil.create('label', '', loadingGroup);
+      loadingLabel.id = "loadingLabel";
+      loadingLabel.innerHTML = "Loading";
+      loadingLabel.style.margin = "0 0.33em";
 
-        L.DomEvent.on(playbackCtrls, 'mouseover', () => {
-          map.dragging.disable();
-          map.doubleClickZoom.disable();
-        }, this);
+      controlGroups.push(loadingGroup);
+      return loadingGroup;
+    },
+  });
 
-        L.DomEvent.on(playbackCtrls, 'mouseout', () => {
-          map.dragging.enable();
-          map.doubleClickZoom.enable();
-        }, this);
+  L.Control.PlaybackGroup = L.Control.extend({
+    onAdd: function() {
+      const playbackGroup = L.DomUtil.create('div', 'leaflet-bar');
+      playbackGroup.id = "playbackGroup";
+      playbackGroup.style.display = "flex";
+      playbackGroup.style.backgroundColor = "#fff";
+      playbackGroup.style.padding = "5px";
 
-        L.DomEvent.on(fpsInput, 'keydown', (e) => {
-          e.preventDefault();
-        });
+      const downloadButton = L.DomUtil.create('input', '', playbackGroup);
+      downloadButton.id = "downloadButton";
+      downloadButton.type = "button";
+      downloadButton.value = "💾";
+      downloadButton.style.border = "0";
+      downloadButton.style.marginRight = "0.4em";
 
-        return playbackCtrls;
-      },
+      const playbackButton = L.DomUtil.create('input', '', playbackGroup);
+      playbackButton.id = "playbackButton";
+      playbackButton.type = "button";
+      playbackButton.value = "▶";
+      playbackButton.style.border = "0";
 
-      onRemove: function(map) {
-        L.DomEvent.off();
-      }
-    });
-  }
+      const historySlider = L.DomUtil.create('input', '', playbackGroup);
+      historySlider.id = "historySlider";
+      historySlider.type = "range";
 
-  if (opts.showStats) {
-    (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
-  }
-  if (opts.showControls) {
-    (new L.Control.PlaybackCtrls({ position: 'bottomleft' })).addTo(bikeMap);
-  }
-  if (opts.showZoom) {
-    (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
-  }
+      const fpsInput = L.DomUtil.create('input', '', playbackGroup);
+      fpsInput.type = "number";
+      fpsInput.id = "fpsInput";
+      fpsInput.min = "1";
+      fpsInput.max = "100";
+      fpsInput.value = "15";
+      fpsInput.style.textAlign = "right";
+      fpsInput.style.marginLeft = "0.5rem";
 
-  bikeMap.browseButton = $("#browse");
-  bikeMap.loadingLabel = $("#progress");
-  bikeMap.historySlider = $("#history");
-  bikeMap.playbackButton = $("#playback");
-  bikeMap.statsLabel = $("#stats");
-  bikeMap.fpsLabel = $("#fpsLabel");
+      const fpsLabel = L.DomUtil.create('label', '', playbackGroup);
+      fpsLabel.innerHTML = "FPS";
+      fpsLabel.id = "fpsLabel";
+      fpsLabel.htmlFor = "fpsInput";
+      fpsLabel.style.padding = "3px";
+
+      L.DomEvent.on(fpsInput, 'keydown', (e) => {
+        e.preventDefault();
+      });
+
+      controlGroups.push(playbackGroup);
+      return playbackGroup;
+    },
+  });
+
+  (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
+  (new L.Control.BrowseGroup({ position: 'bottomleft' })).addTo(bikeMap);
+  (new L.Control.LoadingGroup({ position: 'bottomleft' })).addTo(bikeMap);
+  (new L.Control.PlaybackGroup({ position: 'bottomleft' })).addTo(bikeMap);
+  (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
+
+  bikeMap.statsLabel = $("#statsLabel");
+
+  bikeMap.browseGroup = $("#browseGroup");
+  bikeMap.browseButton = $("#browseButton");
+
+  bikeMap.loadingGroup = $("#loadingGroup");
+  bikeMap.loadingSpinner = $("#loadingSpinner");
+  bikeMap.loadingLabel = $("#loadingLabel");
+
+  bikeMap.playbackGroup = $("#playbackGroup");
+  bikeMap.downloadButton = $("#downloadButton");
+  bikeMap.playbackButton = $("#playbackButton");
+  bikeMap.historySlider = $("#historySlider");
   bikeMap.fpsInput = $("#fpsInput");
+  bikeMap.fpsLabel = $("#fpsLabel");
+
+  for (const group of controlGroups) {
+    L.DomEvent.on(group, 'mouseover', () => {
+      bikeMap.dragging.disable();
+      bikeMap.doubleClickZoom.disable();
+    }, bikeMap);
+
+    L.DomEvent.on(group, 'mouseout', () => {
+      bikeMap.dragging.enable();
+      bikeMap.doubleClickZoom.enable();
+    }, bikeMap);
+  }
 
   return bikeMap;
 }
