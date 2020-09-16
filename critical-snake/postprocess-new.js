@@ -331,6 +331,18 @@ CriticalSnake.PostProcessor = function(options) {
     return points;
   }
 
+  function findSamplePoints(dataPoints, idx, options) {
+    const nextIdx = dataPoints[idx].nextIdx;
+    if (nextIdx == null)
+      return [ dataPoints[idx] ];
+
+    const range = interpolateLinear(dataPoints[idx], dataPoints[nextIdx],
+                                    options.samplePointDist);
+
+    // Drop the destination point in order to avoid double sampling.
+    return range.slice(0, -1);
+  }
+
   function ConvexEnvelopeSearch(data, searchFn) {
     const indexOrder = (a, b) => a.value - b.value;
     const dimensions = [];
@@ -446,10 +458,7 @@ CriticalSnake.PostProcessor = function(options) {
 
   this.detectCircles = function(dataPoints, options) {
     const opts = { ...detectCirclesOptions, ...options };
-
-    for (const dataPoint of dataPoints) {
-      dataPoint.circles = new Set();
-    }
+    const circleIdxs = dataPoints.map(_ => new Set());
 
     const pointsInTime = ConvexEnvelopeSearch(dataPoints, binarySearch);
     pointsInTime.addDimension({
@@ -468,29 +477,19 @@ CriticalSnake.PostProcessor = function(options) {
       value: (item) => item.lng,
     });
 
-    const dirDiff = (a, b) => (a.direction - b.direction + 360) % 360;
-
-    const samplePoints = (dataPoint) => {
-      if (dataPoint.nextIdx == null)
-        return [ dataPoint ];
-
-      const source = dataPoint;
-      const dest = dataPoints[dataPoint.nextIdx];
-      const range = interpolateLinear(source, dest, opts.samplePointDist);
-
-      // Drop the destination point in order to avoid double sampling.
-      return range.slice(0, -1);
+    const dataPointDirDiff = (a, b) => {
+      return (dataPoints[a].direction - dataPoints[b].direction + 360) % 360;
     };
 
     const circles = [];
-    for (const dataPoint of dataPoints) {
-      if (dataPoint.circles.size > opts.skipSamplingThreshold)
+    for (let i = 0; i < dataPoints.length; i++) {
+      if (circleIdxs[i].size > opts.skipSamplingThreshold)
         continue;
 
-      for (const samplePoint of samplePoints(dataPoint)) {
+      for (const samplePoint of findSamplePoints(dataPoints, i, opts)) {
         const undirectedMatches = pointsInTime.itemsInEnvelope(samplePoint);
-        const matches = undirectedMatches.filter(idx => {
-          return dirDiff(dataPoint, dataPoints[idx]) < opts.tolerance.direction;
+        const matches = undirectedMatches.filter(s => {
+          return dataPointDirDiff(i, s) < opts.tolerance.direction;
         });
 
         if (matches.length < opts.minDataPointMatches)
@@ -498,9 +497,13 @@ CriticalSnake.PostProcessor = function(options) {
 
         const circle = createOrJoinCircle(matches, circles, dataPoints, opts);
         for (const idx of matches) {
-          dataPoints[idx].circles.add(circle.id);
+          circleIdxs[idx].add(circle.id);
         }
       }
+    }
+
+    for (let i = 0; i < dataPoints.length; i++) {
+      dataPoints[i].circles = Array.from(circleIdxs[i]);
     }
 
     return circles;
@@ -564,7 +567,7 @@ CriticalSnake.PostProcessor = function(options) {
   }; // CriticalSnake.PostProcessor.associateSnakes()
 
   function allSnakesIn(circles, indexes) {
-    return Array.from(indexes).reduce((snakes, circleIdx) => {
+    return indexes.reduce((snakes, circleIdx) => {
       for (const snakeId of circles[circleIdx].snakes) {
         snakes.add(snakeId);
       }
@@ -605,7 +608,7 @@ CriticalSnake.PostProcessor = function(options) {
       };
 
       for (let i = begin + 1; i < track.length - 1; i++) {
-        // Extend with the current segment as long as the current data-point
+        // Keep extending the current segment as long as the current data-point
         // or the majority of the upcoming data-points have the same snake
         // signature.
         const snakes = allSnakesIn(circles, indexes(i));
