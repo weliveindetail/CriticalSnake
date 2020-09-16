@@ -254,8 +254,8 @@
       trackHeads.addTo(bikeMap);
     }
 
-    function colors(snakeId) {
-      if (snakeId == null)
+    function colors(snakeIdx) {
+      if (snakeIdx == null)
         return "#888";
 
       const snakeColors = [
@@ -266,8 +266,8 @@
         "#8b00ff", // violett
       ];
 
-      if (snakeId >= 0 && snakeId < snakeColors.length)
-        return snakeColors[snakeId];
+      if (snakeIdx >= 0 && snakeIdx < snakeColors.length)
+        return snakeColors[snakeIdx];
 
       return "#000";
     }
@@ -284,7 +284,7 @@
 
       for (const segment of segments.filter(startedAlready)) {
         // Draw non-associated track segments?
-        //if (segment.snakes.length == 0)
+        //if (segment.snakeIdxs.length == 0)
         //  continue;
 
         // Draw segment entirely or only the first number of data-points.
@@ -292,10 +292,10 @@
         const coordIdxs = end < 0 ? segment.dataPointIdxs
                                   : segment.dataPointIdxs.slice(0, end);
 
-        for (const snakeId of segment.snakes) {
+        for (const snakeIdx of segment.snakeIdxs) {
           canvas.addLayer(
               L.polyline(coordIdxs.map(idx => dataPoints[idx]), {
-                color: colors(snakeId),
+                color: colors(snakeIdx),
                 opacity: 0.05
               }));
         }
@@ -303,15 +303,15 @@
     }
 
     function drawCircles(canvas, circles, stamp) {
-      const fullCircle = (c, id) => L.circle(c, {
-        color: colors(id),
+      const fullCircle = (c, idx) => L.circle(c, {
+        color: colors(idx),
         fillOpacity: 0.75,
         radius: 10 * Math.log2(c.dataPointIdxs.length),
         stroke: false,
       });
 
-      const semiCircle = (c, id, from, to) => L.semiCircle(c, {
-        color: colors(id),
+      const semiCircle = (c, idx, from, to) => L.semiCircle(c, {
+        color: colors(idx),
         fillOpacity: 0.75,
         radius: 10 * Math.log2(c.dataPointIdxs.length),
         startAngle: from,
@@ -322,19 +322,18 @@
       const inTime = (c) => c.first_stamp <= stamp && c.last_stamp >= stamp;
 
       for (const circle of circles.filter(c => inTime(c))) {
-        switch (circle.snakes.length) {
+        switch (circle.snakeIdxs.length) {
           case 0:
             canvas.addLayer(fullCircle(circle, null));
             break;
           case 1:
-            const id = circle.snakes[0];
-            canvas.addLayer(fullCircle(circle, id));
+            canvas.addLayer(fullCircle(circle, circle.snakeIdxs[0]));
             break;
           default:
             let angle = rotatingCollisionCircles;
-            const arcSize = 360 / circle.snakes.length;
-            for (const id of circle.snakes) {
-              canvas.addLayer(semiCircle(circle, id, angle, angle + arcSize));
+            const arcSize = 360 / circle.snakeIdxs.length;
+            for (const idx of circle.snakeIdxs) {
+              canvas.addLayer(semiCircle(circle, idx, angle, angle + arcSize));
               angle += arcSize;
             }
             break;

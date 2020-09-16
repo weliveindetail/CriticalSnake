@@ -408,7 +408,7 @@ CriticalSnake.PostProcessor = function(options) {
       last_stamp: maxLastStamp(dataPoints, matches),
       direction: averageDirectionWithWrap(dataPoints, matches),
       dataPointIdxs: matches,
-      id: circles.length,
+      idx: circles.length,
     }
     circles.push(circle);
     return circle;
@@ -497,13 +497,13 @@ CriticalSnake.PostProcessor = function(options) {
 
         const circle = createOrJoinCircle(matches, circles, dataPoints, opts);
         for (const idx of matches) {
-          circleIdxs[idx].add(circle.id);
+          circleIdxs[idx].add(circle.idx);
         }
       }
     }
 
     for (let i = 0; i < dataPoints.length; i++) {
-      dataPoints[i].circles = Array.from(circleIdxs[i]);
+      dataPoints[i].circleIdxs = Array.from(circleIdxs[i]);
     }
 
     return circles;
@@ -547,12 +547,12 @@ CriticalSnake.PostProcessor = function(options) {
       snakeOrigins.slice(0, opts.expectedNumberOfSnakes);
     }
 
-    snakeOrigins.map((snake, snakeId) => {
+    snakeOrigins.map((snake, snakeIdx) => {
       for (const circle of snake) {
         for (const idx of circle.dataPointIdxs) {
           for (let p = dataPoints[idx]; p.nextIdx; p = dataPoints[p.nextIdx]) {
-            for (const circleId of p.circles) {
-              snakes[circleId].add(snakeId);
+            for (const circleIdx of p.circleIdxs) {
+              snakes[circleIdx].add(snakeIdx);
             }
           }
         }
@@ -560,7 +560,7 @@ CriticalSnake.PostProcessor = function(options) {
     });
 
     for (let i = 0; i < circles.length; i++) {
-      circles[i].snakes = Array.from(snakes[i]);
+      circles[i].snakeIdxs = Array.from(snakes[i]);
     }
 
     return snakeOrigins.length;
@@ -568,8 +568,8 @@ CriticalSnake.PostProcessor = function(options) {
 
   function allSnakesIn(circles, indexes) {
     return indexes.reduce((snakes, circleIdx) => {
-      for (const snakeId of circles[circleIdx].snakes) {
-        snakes.add(snakeId);
+      for (const snakeIdx of circles[circleIdx].snakeIdxs) {
+        snakes.add(snakeIdx);
       }
       return snakes;
     }, new Set());
@@ -593,7 +593,7 @@ CriticalSnake.PostProcessor = function(options) {
     const opts = { ...populateTrackSegmentsOptions, ...options };
 
     const nextSegment = (track, begin) => {
-      const indexes = (i) => dataPoints[track[i]].circles;
+      const indexes = (i) => dataPoints[track[i]].circleIdxs;
       const snakesBegin = allSnakesIn(circles, indexes(begin));
 
       const nextDataPointsMajorityInSnake = (first, count) => {
@@ -628,7 +628,7 @@ CriticalSnake.PostProcessor = function(options) {
     for (const track of tracks) {
       let trackPointIdx = 0;
       do {
-        const [snakeIds, nextIdx] = nextSegment(track, trackPointIdx);
+        const [snakeIdxs, nextIdx] = nextSegment(track, trackPointIdx);
 
         // nextIdx is the data-point where this segment ends and the next
         // segment starts.
@@ -638,7 +638,7 @@ CriticalSnake.PostProcessor = function(options) {
             first_stamp: minFirstStamp(dataPoints, segmentIdxs),
             last_stamp: maxLastStamp(dataPoints, segmentIdxs),
             dataPointIdxs: segmentIdxs,
-            snakes: snakeIds,
+            snakeIdxs: snakeIdxs,
           });
         }
 
@@ -650,8 +650,8 @@ CriticalSnake.PostProcessor = function(options) {
   } // // CriticalSnake.PostProcessor.populateTrackSegments
 
   this.getTimeRange = function(circles) {
-    // Find indexes of all circles that are associated with a snke.
-    const snakeIdxs = circles.map((c, idx) => c.snakes.length > 0 ? idx : null)
+    // Find indexes of all circles that are associated with a snake.
+    const snakeIdxs = circles.map((c, idx) => c.snakeIdxs.length > 0 ? idx : null)
                              .filter(idx => idx != null);
     return {
       begin: new Date(minFirstStamp(circles, snakeIdxs)),
