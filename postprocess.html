@@ -178,12 +178,11 @@
 
       const duration = playbackDataset.end - playbackDataset.begin;
       const offset = duration * (frameIdx / 500);
-      const d = new Date(playbackDataset.begin + offset);
-
-      drawTracks(playbackDataset, d);
+      drawTracks(playbackDataset, playbackDataset.begin + offset);
 
       // Adds a leading "0" for single digit values.
       const pad2 = (val) => (val < 10 ? "0" : "") + val;
+      const d = new Date(playbackDataset.begin + offset);
       bikeMap.statsLabel.text(
         `📅 ${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
         `🕗 ${pad2(d.getHours())}:${pad2(d.getMinutes())} ` +

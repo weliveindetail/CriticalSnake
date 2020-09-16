@@ -26,12 +26,11 @@ CriticalSnake.PostProcessor = function(options) {
       chars.splice(-6, 0, '.');
       return parseFloat(chars.join(''));
     };
-    const stamp = new Date(dataPoint.timestamp * 1000);
     return {
-      first_stamp: stamp,
-      last_stamp: stamp,
+      first_stamp: dataPoint.timestamp * 1000,
+      last_stamp: dataPoint.timestamp * 1000,
       lat: floatCoord(dataPoint.latitude),
-      lng: floatCoord(dataPoint.longitude)
+      lng: floatCoord(dataPoint.longitude),
     };
   }
 
@@ -264,26 +263,26 @@ CriticalSnake.PostProcessor = function(options) {
 
   function averageFirstStamp(dataPoints, indexes) {
     indexes = indexes || Array.from(dataPoints.keys());
-    const accStamp = (sum, x) => sum + dataPoints[x].first_stamp.getTime();
-    return new Date(indexes.reduce(accStamp, 0) / indexes.length);
+    const accStamp = (sum, x) => sum + dataPoints[x].first_stamp;
+    return indexes.reduce(accStamp, 0) / indexes.length;
   }
 
   function minFirstStamp(dataPoints, indexes) {
     indexes = indexes || Array.from(dataPoints.keys());
     const globalMaxStamp = 8640000000000;
 
-    const stamp = (i) => dataPoints[i].first_stamp.getTime();
+    const stamp = (i) => dataPoints[i].first_stamp;
     const minimize = (min, i) => Math.min(min, stamp(i));
-    return new Date(indexes.reduce(minimize, globalMaxStamp));
+    return indexes.reduce(minimize, globalMaxStamp);
   }
 
   function maxLastStamp(dataPoints, indexes) {
     indexes = indexes || Array.from(dataPoints.keys());
     const globalMinStamp = 0;
 
-    const stamp = (i) => dataPoints[i].last_stamp.getTime();
+    const stamp = (i) => dataPoints[i].last_stamp;
     const maximize = (max, i) => Math.max(max, stamp(i));
-    return new Date(indexes.reduce(maximize, globalMinStamp));
+    return indexes.reduce(maximize, globalMinStamp);
   }
 
   function averageDirectionWithWrap(dataPoints, indexes) {
@@ -313,16 +312,16 @@ CriticalSnake.PostProcessor = function(options) {
     const requestedSamples = Math.floor(p1.distanceTo(p2) / dist);
     const points = Array.from(Array(Math.max(2, requestedSamples)));
     const fractionIncr = 1 / (points.length - 1);
-    const stampBase = c1.first_stamp.getTime();
-    const stampIncr = (c2.last_stamp.getTime() - stampBase) / (points.length - 1);
+    const stampBase = c1.first_stamp;
+    const stampIncr = (c2.last_stamp - stampBase) / (points.length - 1);
 
     for (let i = 0, f = 0, s = stampBase; i < points.length; i++) {
       const geodesyLatLon = p1.intermediatePointTo(p2, f);
       points[i] = {
         lat: geodesyLatLon.lat,
         lng: geodesyLatLon.lon,
-        first_stamp: new Date(s),
-        last_stamp: new Date(s),
+        first_stamp: s,
+        last_stamp: s,
         direction: c1.direction
       };
       f += fractionIncr;
@@ -456,7 +455,7 @@ CriticalSnake.PostProcessor = function(options) {
     pointsInTime.addDimension({
       lowerBoundTolerance: -opts.tolerance.timeBefore,
       upperBoundTolerance: opts.tolerance.timeAfter,
-      value: (item) => item.first_stamp.getTime(),
+      value: (item) => item.first_stamp,
     });
     pointsInTime.addDimension({
       lowerBoundTolerance: -opts.tolerance.latitude,
@@ -527,8 +526,8 @@ CriticalSnake.PostProcessor = function(options) {
     }
 
     const atStartTime = (circle) => {
-      return circle.first_stamp.getTime() < opts.startTime &&
-             circle.last_stamp.getTime() > opts.startTime;
+      return circle.first_stamp < opts.startTime &&
+             circle.last_stamp > opts.startTime;
     };
 
     for (const circle of circles.filter(atStartTime)) {
@@ -651,8 +650,8 @@ CriticalSnake.PostProcessor = function(options) {
     const snakeIdxs = circles.map((c, idx) => c.snakes.size > 0 ? idx : null)
                              .filter(idx => idx != null);
     return {
-      begin: minFirstStamp(circles, snakeIdxs),
-      end: maxLastStamp(circles, snakeIdxs),
+      begin: new Date(minFirstStamp(circles, snakeIdxs)),
+      end: new Date(maxLastStamp(circles, snakeIdxs)),
     };
   }; // CriticalSnake.PostProcessor.getTimeRange()
 
