@@ -180,14 +180,14 @@ CriticalSnake.PostProcessor = function(options) {
           continue;
         }
 
-        const trackIdx = hashToIdx(participant);
-        if (perTrackPoolIdxs.length <= trackIdx) {
-          perTrackPoolIdxs[trackIdx] = [ pool.length ];
+        dataPoint.trackIdx = hashToIdx(participant);
+        if (perTrackPoolIdxs.length <= dataPoint.trackIdx) {
+          perTrackPoolIdxs[dataPoint.trackIdx] = [ pool.length ];
           pool.push(dataPoint);
           continue;
         }
 
-        const latest = pool[back(perTrackPoolIdxs[trackIdx])];
+        const latest = pool[back(perTrackPoolIdxs[dataPoint.trackIdx])];
         if (isDuplicate(latest, dataPoint)) {
           // Extend the duration of the latest data-point. Don't add the
           // current data-point to the pool.
@@ -198,13 +198,13 @@ CriticalSnake.PostProcessor = function(options) {
 
         if (splitTrack(latest, dataPoint, opts.splitConditions)) {
           // Create a new track starting with this data-point.
-          const newTrackIdx = newIdxForHash(participant);
-          perTrackPoolIdxs[newTrackIdx] = [ pool.length ];
+          dataPoint.trackIdx = newIdxForHash(participant);
+          perTrackPoolIdxs[dataPoint.trackIdx] = [ pool.length ];
           pool.push(dataPoint);
         }
         else {
           // Add the dataPoint to the track and the pool.
-          perTrackPoolIdxs[trackIdx].push(pool.length);
+          perTrackPoolIdxs[dataPoint.trackIdx].push(pool.length);
           pool.push(dataPoint);
         }
       }
@@ -633,11 +633,11 @@ CriticalSnake.PostProcessor = function(options) {
         // nextIdx is the data-point where this segment ends and the next
         // segment starts.
         if (nextIdx - trackPointIdx + 1 >= opts.minSegmentLength) {
-          const segmentIdxs = track.slice(trackPointIdx, nextIdx + 1);
+          const dataPointIdxs = track.slice(trackPointIdx, nextIdx + 1);
           segments.push({
-            first_stamp: minFirstStamp(dataPoints, segmentIdxs),
-            last_stamp: maxLastStamp(dataPoints, segmentIdxs),
-            dataPointIdxs: segmentIdxs,
+            first_stamp: minFirstStamp(dataPoints, dataPointIdxs),
+            last_stamp: maxLastStamp(dataPoints, dataPointIdxs),
+            dataPointIdxs: dataPointIdxs,
             snakeIdxs: snakeIdxs,
           });
         }

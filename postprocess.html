@@ -177,16 +177,16 @@
 
       const duration = playbackDataset.end - playbackDataset.begin;
       const offset = duration * (frameIdx / 500);
-      drawTracks(playbackDataset, playbackDataset.begin + offset);
+      const timestamp = playbackDataset.begin + offset;
+      const bikeCount = drawTracks(playbackDataset, timestamp);
 
       // Adds a leading "0" for single digit values.
       const pad2 = (val) => (val < 10 ? "0" : "") + val;
-      const d = new Date(playbackDataset.begin + offset);
+      const d = new Date(timestamp);
       bikeMap.statsLabel.text(
         `📅 ${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
         `🕗 ${pad2(d.getHours())}:${pad2(d.getMinutes())} ` +
-        `📍🚲 ???`
-      );
+        `📍🚲 ${bikeCount}`);
 
       const diff = Date.now() - refreshViewBegin;
       console.log("Rendering frame took:", Math.round(diff / 10) * 10, "ms");
@@ -248,10 +248,12 @@
       drawShadows(trackShadows, dataset.dataPoints, dataset.segments, stamp);
 
       trackHeads.clearLayers();
-      drawCircles(trackHeads, dataset.circles, stamp);
-
+      const visibleBikes = drawCircles(trackHeads, dataset.dataPoints,
+                                       dataset.circles, stamp);
       trackShadows.addTo(bikeMap);
       trackHeads.addTo(bikeMap);
+
+      return visibleBikes;
     }
 
     function colors(snakeIdx) {
@@ -302,7 +304,7 @@
       }
     }
 
-    function drawCircles(canvas, circles, stamp) {
+    function drawCircles(canvas, dataPoints, circles, stamp) {
       const fullCircle = (c, idx) => L.circle(c, {
         color: colors(idx),
         fillOpacity: 0.75,
@@ -321,7 +323,9 @@
 
       const inTime = (c) => c.first_stamp <= stamp && c.last_stamp >= stamp;
 
+      const trackIdxs = new Set();
       for (const circle of circles.filter(c => inTime(c))) {
+        circle.dataPointIdxs.forEach(idx => trackIdxs.add(dataPoints[idx].trackIdx));
         switch (circle.snakeIdxs.length) {
           case 0:
             canvas.addLayer(fullCircle(circle, null));
@@ -339,6 +343,8 @@
             break;
         }
       }
+
+      return trackIdxs.size;
     }
   </script>
 </body>
