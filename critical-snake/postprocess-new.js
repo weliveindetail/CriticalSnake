@@ -211,17 +211,18 @@ CriticalSnake.PostProcessor = function(options) {
       }
     }
 
+    const trackFilter = (idxs) => isRelevantTrack(pool, idxs, opts.trackFilter);
+    const relevantTracks = perTrackPoolIdxs.filter(trackFilter);
+    relevantTracks.sort((trackA, trackB) => trackB.length - trackA.length);
+
+    const filteredIrrelTracks = perTrackPoolIdxs.flat().length -
+                                relevantTracks.flat().length;
+
     console.log("Filtered", filteredDupes, "duplicate data points");
     console.log("Filtered", filteredOutOfRange, "data points outside area of interest");
+    console.log("Filtered", filteredIrrelTracks, "data points from irrelevant tracks");
 
-    const trackFilter = (indexes) => isRelevantTrack(pool, indexes,
-                                                     opts.trackFilter);
-    const descendingLengthOrder = (trackA, trackB) => trackB.length - trackA.length;
-
-    const relTrackPointTracks = perTrackPoolIdxs.filter(trackFilter)
-                                                .sort(descendingLengthOrder);
-
-    return reindexTracks(pool, relTrackPointTracks);
+    return reindexTracks(pool, relevantTracks);
   };
   // CriticalSnake.PostProcessor.analyzeTracks()
 
