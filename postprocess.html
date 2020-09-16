@@ -134,7 +134,7 @@
       const startTime = 1598638200000; // 2020-08-28, 20:10
       const associateSnakesBegin = Date.now();
       const snakes = PostProcessor.associateSnakes(dataPoints, circles, { startTime: startTime });
-      console.log("Snakes:", snakes);
+      console.log("Snakes detected by origin:", snakes);
       console.log("Associating snakes took:", Date.now() - associateSnakesBegin, "ms");
 
       const populateTrackSegmentsBegin = Date.now();
@@ -149,7 +149,6 @@
       playbackDataset = {
         dataPoints: dataPoints,
         circles: circles,
-        snakes: snakes,
         tracks: tracks,
         segments: segments,
         begin: timeRange.begin.getTime() - 5 * minute,
@@ -323,17 +322,17 @@
       const inTime = (c) => c.first_stamp <= stamp && c.last_stamp >= stamp;
 
       for (const circle of circles.filter(c => inTime(c))) {
-        switch (circle.snakes.size) {
+        switch (circle.snakes.length) {
           case 0:
             canvas.addLayer(fullCircle(circle, null));
             break;
           case 1:
-            const id = circle.snakes.values().next().value;
+            const id = circle.snakes[0];
             canvas.addLayer(fullCircle(circle, id));
             break;
           default:
             let angle = rotatingCollisionCircles;
-            const arcSize = 360 / circle.snakes.size;
+            const arcSize = 360 / circle.snakes.length;
             for (const id of circle.snakes) {
               canvas.addLayer(semiCircle(circle, id, angle, angle + arcSize));
               angle += arcSize;
