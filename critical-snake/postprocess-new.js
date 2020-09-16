@@ -107,20 +107,38 @@ CriticalSnake.PostProcessor = function(options) {
     return false;
   }
 
-  function reindexTracks(pool, perTrackIdxs) {
-    const trackPointIdxs = perTrackIdxs.flat();
-    trackPointIdxs.sort((a, b) => pool[a].first_stamp - pool[b].first_stamp);
+  function reindexTracks(pool, perTrackPoolIdxs) {
+    // Indexes into the pool for all our tracks, sorted by ascending timestamps.
+    const sortedPoolIdxs = perTrackPoolIdxs.flat();
+    sortedPoolIdxs.sort((a, b) => pool[a].first_stamp - pool[b].first_stamp);
 
-    const lookup = Array.from(Array(trackPointIdxs.length)).fill(-1);
-    trackPointIdxs.forEach((oldIdx, newIdx) => lookup[oldIdx] = newIdx);
+    // A translation of indexes from the original ordering in the pool (oldIdx)
+    // to the new ordering by ascending timestamps (newIdx).
+    const lookup = Array.from(Array(sortedPoolIdxs.length)).fill(-1);
+    for (let newIdx = 0; newIdx < sortedPoolIdxs.length; newIdx++) {
+      const oldIdx = sortedPoolIdxs[newIdx];
+      lookup[oldIdx] = newIdx;
+    }
 
-    const dataPoints = trackPointIdxs.map(idx => pool[idx]);
-    const tracks = perTrackIdxs.map(track => track.map(oldIdx => lookup[oldIdx]));
+    // The reindexed pool is what we call "dataPoints" from now on.
+    const dataPoints = sortedPoolIdxs.map(newIdx => pool[newIdx]);
 
-    return [
-      tracks,
-      dataPoints
-    ];
+    // A track is an array of indexes into dataPoints. Each dataPoint has a
+    // nextIdx that points to the next dataPoint in the track or indicates the
+    // end of the track (null).
+    const tracks = perTrackPoolIdxs.map(oldTrackIdxs => {
+      const newTrackIdxs = [ lookup[oldTrackIdxs[0]] ];
+      for (let i = 1; i < oldTrackIdxs.length; i++) {
+        const oldIdx = oldTrackIdxs[i];
+        const newIdx = lookup[oldIdx];
+        dataPoints[back(newTrackIdxs)].nextIdx = newIdx;
+        newTrackIdxs.push(newIdx);
+      }
+      dataPoints[back(newTrackIdxs)].nextIdx = null;
+      return newTrackIdxs;
+    });
+
+    return [ tracks, dataPoints ];
   }
 
   const analyzeTracksOptions = {
@@ -199,12 +217,12 @@ CriticalSnake.PostProcessor = function(options) {
             trackPointTracks[idx] = [ trackPoints.length - 1 ];
           }
           else {
-            // Add vector to the latest data-point in the track and push the new
-            // data-point on top.
+            // In the last dataPoint of the track, store the direction that
+            // leads to the current dataPoint. Then add the dataPoint to the
+            // track and the pool.
             latest.direction = vector.direction;
-            latest.next = dataPoint;
+            trackPointTracks[idx].push(trackPoints.length);
             trackPoints.push(dataPoint);
-            trackPointTracks[idx].push(trackPoints.length - 1);
           }
         }
       }
@@ -213,17 +231,12 @@ CriticalSnake.PostProcessor = function(options) {
     console.log("Filtered", filteredDupes, "duplicate data points");
     console.log("Filtered", filteredOutOfRange, "data points outside area of interest");
 
-    // Return a flat array of data-points from all relevant tracks sorted by
-    // ascending timestamps. For convenience we omit the last data-point in each
-    // track, because it has no "next" property.
     const trackFilter = (indexes) => isRelevantTrack(trackPoints, indexes,
                                                      opts.trackFilter);
     const descendingLengthOrder = (trackA, trackB) => trackB.length - trackA.length;
-    const dropEveryLastDataPoint = (track) => track.slice(0, -1);
 
     const relTrackPointTracks = trackPointTracks.filter(trackFilter)
-                                                .sort(descendingLengthOrder)
-                                                .map(dropEveryLastDataPoint);
+                                                .sort(descendingLengthOrder);
 
     return reindexTracks(trackPoints, relTrackPointTracks);
   };
@@ -474,16 +487,27 @@ CriticalSnake.PostProcessor = function(options) {
 
     const dirDiff = (a, b) => (a.direction - b.direction + 360) % 360;
 
+    const samplePoints = (dataPoint) => {
+      if (dataPoint.nextIdx == null)
+        return [ dataPoint ];
+
+      const source = dataPoint;
+      const dest = dataPoints[dataPoint.nextIdx];
+      const range = interpolateLinear(source, dest, opts.samplePointDist);
+
+      // Drop the destination point in order to avoid double sampling.
+      return range.slice(0, -1);
+    };
+
     const circles = [];
-    for (const p of dataPoints) {
-      if (p.circles.size > opts.skipSamplingThreshold)
+    for (const dataPoint of dataPoints) {
+      if (dataPoint.circles.size > opts.skipSamplingThreshold)
         continue;
 
-      const samplePoints = interpolateLinear(p, p.next, opts.samplePointDist);
-      for (const samplePoint of samplePoints.slice(0, -1)) {
+      for (const samplePoint of samplePoints(dataPoint)) {
         const undirectedMatches = pointsInTime.itemsInEnvelope(samplePoint);
         const matches = undirectedMatches.filter(idx => {
-          return dirDiff(p, dataPoints[idx]) < opts.tolerance.direction;
+          return dirDiff(dataPoint, dataPoints[idx]) < opts.tolerance.direction;
         });
 
         if (matches.length < opts.minDataPointMatches)
@@ -543,7 +567,7 @@ CriticalSnake.PostProcessor = function(options) {
     snakeOrigins.map((snake, snakeId) => {
       for (const circle of snake) {
         for (const idx of circle.dataPointIdxs) {
-          for (let p = dataPoints[idx]; p.next; p = p.next) {
+          for (let p = dataPoints[idx]; p.nextIdx; p = dataPoints[p.nextIdx]) {
             for (const circleId of p.circles) {
               circles[circleId].snakes.add(snakeId);
             }
