@@ -130,12 +130,18 @@
 
     // ----------------------------------------------------
 
-    function loadRecording(data) {
+    function loadRecording(compressedDataSet) {
       const PostProcessor = new CriticalSnake.PostProcessor();
+      const kilobyte = (str) => Math.round((str.length * 2) / 1024);
+
+      const decompressionBegin = Date.now();
+      const rawDataSet = LZString.decompressFromUTF16(compressedDataSet);
+      console.log("Compressed size is:", kilobyte(compressedDataSet), "KB");
+      console.log("Decompressed size is:", kilobyte(rawDataSet), "KB");
+      console.log("Decompression took:", Date.now() - decompressionBegin, "ms");
 
       const analyzeTracksBegin = Date.now();
-      const rawDataSet = JSON.parse(data);
-      const [ tracks, dataPoints ] = PostProcessor.analyzeTracks(rawDataSet);
+      const [ tracks, dataPoints ] = PostProcessor.analyzeTracks(JSON.parse(rawDataSet));
       console.log("Data-points:", dataPoints);
       console.log("Analyzing tracks took:", Date.now() - analyzeTracksBegin, "ms");
 
