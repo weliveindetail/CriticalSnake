@@ -83,6 +83,16 @@
       }
     });
 
+    // Space key can toggle pause and resume.
+    $(document).on('keypress', e => {
+      if (playbackDataset && e.keyCode == 32) {
+        if (isRunning())
+          pause();
+        else
+          resume();
+      }
+    });
+
     bikeMap.historySlider.attr({ min: 0, max: 500 });
     $(document).on("input", bikeMap.historySlider, () => {
       if (playbackDataset) {
