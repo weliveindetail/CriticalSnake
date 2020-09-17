@@ -9,6 +9,7 @@ function createBikeMap(L, options) {
     ...options,
     renderer: L.canvas(),
     zoomControl: false,
+    touchZoom: true,
   });
 
   const wiki = {
@@ -43,6 +44,7 @@ function createBikeMap(L, options) {
       const browseGroup = L.DomUtil.create('div', 'leaflet-bar');
       browseGroup.id = "browseGroup";
       browseGroup.style.display = "flex";
+      browseGroup.style.alignItems = "center";
       browseGroup.style.backgroundColor = "#fff";
       browseGroup.style.padding = "5px";
 
@@ -61,6 +63,7 @@ function createBikeMap(L, options) {
       const loadingGroup = L.DomUtil.create('div', 'leaflet-bar');
       loadingGroup.id = "loadingGroup";
       loadingGroup.style.display = "flex";
+      loadingGroup.style.alignItems = "center";
       loadingGroup.style.backgroundColor = "#fff";
       loadingGroup.style.padding = "5px";
 
@@ -84,6 +87,7 @@ function createBikeMap(L, options) {
       const playbackGroup = L.DomUtil.create('div', 'leaflet-bar');
       playbackGroup.id = "playbackGroup";
       playbackGroup.style.display = "flex";
+      playbackGroup.style.alignItems = "center";
       playbackGroup.style.backgroundColor = "#fff";
       playbackGroup.style.padding = "5px";
 
@@ -110,6 +114,7 @@ function createBikeMap(L, options) {
       fpsInput.min = "1";
       fpsInput.max = "100";
       fpsInput.value = "15";
+      fpsInput.style.width = "3rem";
       fpsInput.style.textAlign = "right";
       fpsInput.style.marginLeft = "0.5rem";
 
@@ -117,7 +122,7 @@ function createBikeMap(L, options) {
       fpsLabel.innerHTML = "FPS";
       fpsLabel.id = "fpsLabel";
       fpsLabel.htmlFor = "fpsInput";
-      fpsLabel.style.padding = "3px";
+      fpsLabel.style.padding = "0 3px";
 
       L.DomEvent.on(fpsInput, 'keydown', (e) => {
         e.preventDefault();
@@ -150,16 +155,19 @@ function createBikeMap(L, options) {
   bikeMap.fpsInput = $("#fpsInput");
   bikeMap.fpsLabel = $("#fpsLabel");
 
-  for (const group of controlGroups) {
-    L.DomEvent.on(group, 'mouseover', () => {
-      bikeMap.dragging.disable();
-      bikeMap.doubleClickZoom.disable();
-    }, bikeMap);
-
-    L.DomEvent.on(group, 'mouseout', () => {
-      bikeMap.dragging.enable();
-      bikeMap.doubleClickZoom.enable();
-    }, bikeMap);
+  if (L.Browser.touch) {
+    for (const group of controlGroups) {
+      L.DomEvent.on(group, 'click', L.DomEvent.stopPropagation);
+      L.DomEvent.on(group, 'touchstart', L.DomEvent.stopPropagation);
+      L.DomEvent.on(group, 'touchmove', L.DomEvent.stopPropagation);
+      L.DomEvent.on(group, 'touchend', L.DomEvent.stopPropagation);
+    }
+  }
+  else {
+    for (const group of controlGroups) {
+      L.DomEvent.disableClickPropagation(group);
+      L.DomEvent.on(group, 'mousewheel', L.DomEvent.stopPropagation);
+    }
   }
 
   return bikeMap;

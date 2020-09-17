@@ -2,11 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
   <title>CriticalSnake Postprocess</title>
+  <style>
+    body {
+      font-size: 1rem;
+    }
+    #osm-map {
+      position: absolute;
+      left: 0px;
+      top: 0px;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
 </head>
 <body>
-  <div id="osm-map" style="position: absolute; left: 0px; top: 0px; width: 100%; height: 100%;">
-  </div>
+  <div id="osm-map"></div>
 
   <link rel="stylesheet" href="3rd-party/leaflet16/leaflet.css">
   <script src="3rd-party/leaflet16/leaflet.js"></script>
@@ -244,13 +257,19 @@
       bikeMap.removeLayer(trackHeads);
       bikeMap.removeLayer(trackShadows);
 
-      trackShadows.clearLayers();
-      drawShadows(trackShadows, dataset.dataPoints, dataset.segments, stamp);
+      if (L.Browser.mobile) {
+        // At this point we better avoid drawing track shadows on mobile,
+        // because it's too resource intense for most devices.
+      }
+      else {
+        trackShadows.clearLayers();
+        drawShadows(trackShadows, dataset.dataPoints, dataset.segments, stamp);
+        trackShadows.addTo(bikeMap);
+      }
 
       trackHeads.clearLayers();
       const visibleBikes = drawCircles(trackHeads, dataset.dataPoints,
                                        dataset.circles, stamp);
-      trackShadows.addTo(bikeMap);
       trackHeads.addTo(bikeMap);
 
       return visibleBikes;
