@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>CriticalSnake Recorder</title>
+  <link rel="stylesheet" href="3rd-party/newcss11/new.min.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      max-width: initial;
+      font-family: sans-serif;
+      font-size: 1rem;
+    }
+    div.panel {
+      background: #eee;
+      padding: 0 5px;
+    }
+    div.panel * {
+      margin: 5px 0 5px 5px;
+      display: inline-block;
+    }
+    div.panel #intervalField {
+      width: 5rem;
+    }
+    div.panel #urlField {
+      width: 15rem;
+    }
+    pre {
+      font-size: 0.5rem;
+      border-radius: 0;
+      padding: 5px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <input type="button" value="Record" id="nextButton">
+    <div>
+      <label for="intervalField">Interval (sec):</label>
+      <input type="number" id="intervalField" value="30" min="10" max="300">
+    </div>
+    <div>
+      <label for="urlField">Source:</label>
+      <input type="text" id="urlField" value="https://api.criticalmaps.net/postv2">
+    </div>
+  </div>
+  <pre></pre>
+
+  <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
+  <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
+  <script src="3rd-party/lzstring14/lz-string.min.js"></script>
+
+  <script>
+    const panel = {
+      nextButton: $("#nextButton"),
+      intervalField: $("#intervalField"),
+      urlField: $("#urlField"),
+      output: $("pre"),
+    };
+
+    $(document).ready(function() {
+      panel.nextButton.click(() => {
+        switch (panel.nextButton.val()) {
+          case "Record":
+            panel.output.show();
+            panel.nextButton.val("Finish");
+            panel.intervalField.prop("disabled", true);
+            panel.intervalField.css("color", "#888");
+            panel.urlField.prop("disabled", true);
+            panel.urlField.css("color", "#888");
+            startRecording(panel.intervalField.val(), panel.urlField.val());
+            break;
+          case "Finish":
+            panel.nextButton.val("Download");
+            const formattedOutput = finishRecording(panel.output.text());
+            panel.output.text(formattedOutput);
+            break;
+          case "Download":
+            downloadRecording(panel.output.text());
+            break;
+        }
+      });
+
+      panel.intervalField.change(() => {
+        console.log("intervalField", panel.intervalField.val());
+      });
+      panel.urlField.change(() => { // doesn't work
+        console.log("urlField", panel.urlField.val());
+      });
+    });
+
+    function formatDate(timestamp) {
+      const d = timestamp ? new Date(timestamp * 1000) : new Date();
+      const pad2 = (val) => (val < 10 ? "0" : "") + val;
+      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    };
+
+    function formatTime(timestamp) {
+      const d = timestamp ? new Date(timestamp * 1000) : new Date();
+      const pad2 = (val) => (val < 10 ? "0" : "") + val;
+      return `${pad2(d.getHours())}-${pad2(d.getMinutes())}-${pad2(d.getSeconds())}`
+    };
+
+    function print(txt) {
+      panel.output.append(txt);
+    }
+
+    function verifyResponse(url, data) {
+      if (!data) {
+        console.error("Error querying data from ${url}");
+        return false;
+      }
+      if (!data["locations"] || data["locations"] === {}) {
+        console.warn("No locations in response data");
+        return false;
+      }
+      return true;
+    }
+
+    function fetchData(url) {
+      $.getJSON(url, data => {
+        if (verifyResponse(url, data)) {
+          print(`"${formatDate()}_${formatTime()}":{`);
+          let goddamntrailingcomma = "";
+          for (const hash in data.locations) {
+            print(`${goddamntrailingcomma}"${hash}":{` +
+              `"timestamp":${data.locations[hash].timestamp},` +
+              `"latitude":${data.locations[hash].latitude},` +
+              `"longitude":${data.locations[hash].longitude}` +
+            `}`);
+            goddamntrailingcomma = ",";
+          }
+          print('},\n');
+        }
+      });
+    }
+
+    let fetchTimer = null;
+    function startRecording(interval, url) {
+      fetchData(url);
+      const millis = Math.max(10000, parseInt(interval));
+      fetchTimer = setInterval(() => fetchData(url), millis);
+    }
+
+    function finishRecording(rawOutput) {
+      clearInterval(fetchTimer);
+      const json = JSON.parse("{" + rawOutput.slice(0, -2) + "}");
+      return JSON.stringify(json, null, 2);
+    }
+
+    function downloadRecording(json) {
+      const kilobyte = (str) => Math.round((str.length * 2) / 1024);
+
+      console.log(json);
+      const text = JSON.stringify(json);
+      console.log("Raw size is:", kilobyte(text), "KB");
+      const compressed = LZString.compressToUTF16(text);
+      console.log("Compressed size is:", kilobyte(compressed), "KB");
+
+      const filename = `${formatDate()}_${formatTime()}.recording`;
+      const blob = new Blob([compressed], {type: "text/plain;charset=utf-16"});
+      saveAs(blob, filename);
+    }
+  </script>
+</body>
+</html>
