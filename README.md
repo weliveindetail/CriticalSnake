@@ -20,14 +20,14 @@ Now click on `Download` to save the data as a compressed file on disk. In this e
 
 Turning the raw data into a replay takes a bit of work and we don't want to repeat that work whenever someone opens the replay page. That's why there's a post-processing step here: It extracts a subset  of the raw data and stores it in a format that's more suitable for replay (even on mobile devices).
 
-<img src="img/instructions-04-postprocess.png" alt="instructions04" width="400">
+Now navigate to the [postprocess page](https://weliveindetail.github.io/CriticalSnake/postprocess.html) and click the `Choose file` button in the lower left corner. Select the raw data file we saved earlier (in my case it was `2020-08-28.recording`). After a short loading phase, you can start tuning the replay.
 
-Navigate to the [postprocess page](https://weliveindetail.github.io/CriticalSnake/postprocess.html) and click the `Choose file` button in the lower left corner. Now select the raw data file we saved earlier (in my case it was `2020-08-28.recording`). Depending on the perfomance of your computer, the process may take a while. Eventually you should be able to preview the replay like below.
+![instructions04](img/instructions-04-postprocess.png)
 
-**Note:** Post-processing parameters cannot be accessed from the user interface yet, but I will add them as soon as possible. For the time being, please [checkout the code](https://github.com/weliveindetail/CriticalSnake/blob/f9f4878a25733fcef645d7d3ca8105b44262f84d/postprocess.html#L153) and make adjustments there if necessary.
+Some essential post-processing parameters are available from the user interface. In order to play with all of them, check out the global `CriticalSnake.PostProcessOptions` in the developer console.
 
-<img src="img/instructions-05-download-replay.png" alt="instructions05" width="400">
+Once you found the best parameters for your replay, use the button with the 💾 symbol in the lower left corner to download the replay file. In this example, I named it `2020-08-28-Berlin.replay` and [committed it to the repository](https://github.com/weliveindetail/CriticalSnake/tree/f9f4878a25733fcef645d7d3ca8105b44262f84d/replay/2020-08-28/Berlin) side-by-side with a small "driver" HTML file that controls visualization and interaction. It's now [accessible from our repository via GitHub Pages](https://weliveindetail.github.io/CriticalSnake/replay/2020-08-28/Berlin/).
 
-Now use the button with the 💾 symbol in the lower left corner to download the replay file. In this example, I named the file `2020-08-28-Berlin.replay` and [committed it to the repository](https://github.com/weliveindetail/CriticalSnake/tree/f9f4878a25733fcef645d7d3ca8105b44262f84d/replay/2020-08-28/Berlin) side-by-side with a small "driver" HTML file that controls visualization and interaction. It's now [accessible from our repository via GitHub Pages](https://weliveindetail.github.io/CriticalSnake/replay/2020-08-28/Berlin/).
+![instructions05](img/instructions-05-download-replay.png)
 
 I hope creating a new replay based on the existing one isn't too complicated. Please let me know if you have any questions. In case you encounter issues, please report a bug here in the GitHub repo. Thanks!
