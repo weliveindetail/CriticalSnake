@@ -5,29 +5,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>CriticalSnake Postprocess</title>
+
+  <link rel="stylesheet" href="3rd-party/nouislider14/nouislider.min.css">
+  <link rel="stylesheet" href="3rd-party/leaflet16/leaflet.css">
   <style>
     body {
       font-size: 1rem;
     }
     #osm-map {
       position: absolute;
-      left: 0px;
-      top: 0px;
+      left: 0;
+      top: 0;
       width: 100%;
       height: 100%;
+    }
+
+    /* TODO: We should define these styles from the JS code too */
+    .noUi-horizontal .noUi-handle {
+      width: 20px;
+      height: 20px;
+      right: -10px;
+      top: -7px;
+    }
+    .noUi-handle:before {
+      background: transparent;
+      text-align: center;
+      display: block;
+      margin-top: -6px;
+      margin-left: -9px;
+    }
+    .noUi-handle:after {
+      background: transparent;
+    }
+
+    .noUi-horizontal .noUi-handle:before {
+      content: "O";
+    }
+    .noUi-horizontal .noUi-handle-lower:before {
+      content: "S";
+    }
+    .noUi-horizontal .noUi-handle-upper:before {
+      content: "E";
+    }
+    .noUi-horizontal {
+      height: 8px;
     }
   </style>
 </head>
 <body>
   <div id="osm-map"></div>
 
-  <link rel="stylesheet" href="3rd-party/leaflet16/leaflet.css">
   <script src="3rd-party/leaflet16/leaflet.js"></script>
   <script src="3rd-party/leaflet-semicircle20/Semicircle.js"></script>
   <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
   <script src="3rd-party/geodesy11/latlon-spherical.min.js"></script>
   <script src="3rd-party/lzstring14/lz-string.min.js"></script>
   <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
+  <script src="3rd-party/nouislider14/nouislider.min.js"></script>
 
   <script src="critical-snake/bikemap.js"></script>
   <script src="critical-snake/critical-snake.js"></script>
@@ -48,6 +82,7 @@
     bikeMap.browseGroup.show();
     bikeMap.loadingGroup.hide();
     bikeMap.playbackGroup.hide();
+    bikeMap.postprocessGroup.hide();
     bikeMap.statsLabel.hide();
 
     let playbackFrameIdx = 0;
@@ -70,7 +105,7 @@
     });
 
     let playbackFPS = 15;
-    $(document).on("change", bikeMap.fpsInput, () => {
+    bikeMap.fpsInput.change(() => {
       playbackFPS = parseInt(bikeMap.fpsInput.val());
       console.log("FPS changed to", playbackFPS);
     });
@@ -90,10 +125,12 @@
       const reader = new FileReader();
       $(reader).on('load', (event) => {
         try {
-          loadRecording(event.target.result);
           playbackRecording = this.files[0].name;
-          bikeMap.playbackGroup.show();
+          playbackRawDataset = decompressDataset(event.target.result);
+          loadRawTracks(playbackRawDataset);
           bikeMap.statsLabel.show();
+          bikeMap.playbackGroup.show();
+          bikeMap.postprocessGroup.show();
         }
         catch (ex) {
           bikeMap.browseGroup.show();
@@ -102,7 +139,65 @@
         }
         bikeMap.loadingGroup.hide();
       });
-      reader.readAsText(this.files[0]);
+
+      // Give the UI a chance to refresh and show the loading state.
+      setTimeout(() => reader.readAsText(this.files[0]), 10);
+    });
+
+    bikeMap.selectTimeRangeSlider.change(function(event, timeRange) {
+      console.log(timeRange);
+      if (Object.keys(CriticalSnake.PostProcessOptions).length == 0)
+        return;
+
+      // Overwrite post-process parameters from control values in the global
+      // `CriticalSnake.PostProcessOptions` instead of passing them to the
+      // individual functions. It allows users to query and modify them easily
+      // from the browser's debug console.
+      const analyzeTracks = CriticalSnake.PostProcessOptions.analyzeTracks;
+      analyzeTracks.startStamp = timeRange.start;
+      analyzeTracks.endStamp = timeRange.end;
+
+      const associateSnakes = CriticalSnake.PostProcessOptions.associateSnakes;
+      associateSnakes.startTime = timeRange.origins;
+    });
+
+    bikeMap.selectLocationFilter.change(function() {
+      const val = bikeMap.selectLocationFilter.val();
+      console.log(val);
+      console.log(CriticalSnake.FilterBounds[bikeMap.selectLocationFilter.val()]);
+
+      if (!CriticalSnake.FilterBounds.hasOwnProperty(val)) {
+        console.error(`Invalid option: unknown filter-bounds '${val}'`);
+        return;
+      }
+
+      const analyzeTracks = CriticalSnake.PostProcessOptions.analyzeTracks;
+      analyzeTracks.filterBounds = CriticalSnake.FilterBounds[val];
+
+      bikeMap.panTo(analyzeTracks.filterBounds.getCenter());
+    });
+
+    bikeMap.postprocessButton.click(function() {
+      bikeMap.postprocessGroup.hide();
+      bikeMap.playbackGroup.hide();
+      bikeMap.statsLabel.hide();
+      bikeMap.loadingGroup.show();
+
+      // Give the UI a chance to refresh and show the loading state.
+      setTimeout(() => {
+        try {
+          postprocessRecording(playbackRawDataset, {});
+          bikeMap.statsLabel.show();
+          bikeMap.playbackGroup.show();
+          bikeMap.updateTimeRangeOptions();
+          bikeMap.selectLocationFilter.trigger("change");
+        }
+        catch (ex) {
+          console.error("Postprocessing failed:", ex);
+        }
+        bikeMap.loadingGroup.hide();
+        bikeMap.postprocessGroup.show();
+      }, 10);
     });
 
     bikeMap.downloadButton.click(function() {
@@ -130,8 +225,7 @@
 
     // ----------------------------------------------------
 
-    function loadRecording(compressedDataSet) {
-      const PostProcessor = new CriticalSnake.PostProcessor();
+    function decompressDataset(compressedDataSet) {
       const kilobyte = (str) => Math.round((str.length * 2) / 1024);
 
       const decompressionBegin = Date.now();
@@ -140,8 +234,44 @@
       console.log("Decompressed size is:", kilobyte(rawDataSet), "KB");
       console.log("Decompression took:", Date.now() - decompressionBegin, "ms");
 
+      return JSON.parse(rawDataSet);
+    }
+
+    function loadRawTracks(rawDataSet) {
+      const PostProcessor = new CriticalSnake.PostProcessor();
+
+      const loadRawTracksBegin = Date.now();
+      const [ dataPoints, tracks, timeRange ] = PostProcessor.loadRawTracks(rawDataSet);
+      console.log("Data-points:", dataPoints);
+      console.log("Tracks:", tracks);
+      console.log("Loading raw tracks took:", Date.now() - loadRawTracksBegin, "ms");
+      console.log("Data covers time range\nfrom:", timeRange.begin, "\nto:", timeRange.end);
+
+      const minute = 60 * 1000;
+      playbackDataset = {
+        dataPoints: dataPoints,
+        tracks: tracks,
+        begin: timeRange.begin.getTime() - 5 * minute,
+        end: timeRange.end.getTime(),
+      };
+
+      const duration = playbackDataset.end - playbackDataset.begin;
+      bikeMap.percentToTimestamp = (percent) => {
+        const offset = Math.round(duration * parseFloat(percent) / 100);
+        return playbackDataset.begin + offset;
+      };
+
+      bikeMap.updateTimeRangeOptions();
+
+      playbackFrameIdx = 0;
+      refreshView(playbackFrameIdx);
+    };
+
+    function postprocessRecording(rawDataSet) {
+      const PostProcessor = new CriticalSnake.PostProcessor();
+
       const analyzeTracksBegin = Date.now();
-      const [ tracks, dataPoints ] = PostProcessor.analyzeTracks(JSON.parse(rawDataSet));
+      const [ tracks, dataPoints ] = PostProcessor.analyzeTracks(rawDataSet);
       console.log("Data-points:", dataPoints);
       console.log("Analyzing tracks took:", Date.now() - analyzeTracksBegin, "ms");
 
@@ -152,7 +282,7 @@
 
       const startTime = 1598638200000; // 2020-08-28, 20:10
       const associateSnakesBegin = Date.now();
-      const snakes = PostProcessor.associateSnakes(dataPoints, circles, { startTime: startTime });
+      const snakes = PostProcessor.associateSnakes(dataPoints, circles);
       console.log("Snakes detected by origin:", snakes);
       console.log("Associating snakes took:", Date.now() - associateSnakesBegin, "ms");
 
@@ -197,7 +327,10 @@
       const duration = playbackDataset.end - playbackDataset.begin;
       const offset = duration * (frameIdx / 500);
       const timestamp = playbackDataset.begin + offset;
-      const bikeCount = drawTracks(playbackDataset, timestamp);
+
+      const bikeCount = playbackDataset.circles
+                      ? drawTracks(playbackDataset, timestamp)
+                      : drawRawTracks(playbackDataset, timestamp);
 
       // Adds a leading "0" for single digit values.
       const pad2 = (val) => (val < 10 ? "0" : "") + val;
@@ -258,6 +391,38 @@
 
     let trackHeads = L.layerGroup([], { pane: "markerPane" });
     let trackShadows = L.layerGroup([], { pane: "shadowPane" });
+
+    function drawRawTracks(dataset, stamp) {
+      bikeMap.removeLayer(trackHeads);
+      bikeMap.removeLayer(trackShadows);
+
+      trackShadows.clearLayers();
+
+      const minute = 60 * 1000;
+      const withinLast10Minutes = (idx) => {
+        if (dataset.dataPoints[idx].first_stamp <= stamp)
+          if (dataset.dataPoints[idx].last_stamp > stamp - 10 * minute)
+            return true;
+        return false;
+      };
+
+      let visibleBikes = 0;
+      for (const track of dataset.tracks) {
+        const dataPointIdxs = track.filter(withinLast10Minutes);
+        const coords = dataPointIdxs.map(idx => dataset.dataPoints[idx]);
+        if (coords.length > 1) {
+          visibleBikes += 1;
+          trackShadows.addLayer(
+              L.polyline(coords, {
+                color: "#888",
+                opacity: 0.1
+              }));
+        }
+      }
+
+      trackShadows.addTo(bikeMap);
+      return visibleBikes;
+    }
 
     function drawTracks(dataset, stamp) {
       bikeMap.removeLayer(trackHeads);

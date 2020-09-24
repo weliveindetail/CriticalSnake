@@ -1,24 +1,15 @@
 (function(CriticalSnake) {
 
-CriticalSnake.PostProcessor = function(options) {
+// Make options accessible from the browser's debug console. The actual options
+// are populated when creating a CriticalSnake.PostProcessor().
+CriticalSnake.PostProcessOptions = {};
 
-  function numericRange(min, max) {
-    this.contains = (val) => min < val && max > val;
-    return this;
-  }
+CriticalSnake.FilterBounds = {
+  Berlin: L.latLngBounds([52.40, 13.23], [52.61, 13.56]),
+  Barcelona: L.latLngBounds([41.26, 2.00], [41.45, 2.29]),
+};
 
-  this.coordFilters = {
-    Berlin: function() {
-      const latRange = new numericRange(52.40, 52.61);
-      const lngRange = new numericRange(13.23, 13.56);
-      return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
-    },
-    Barcelona: function() {
-      const latRange = numericRange(41.26, 41.45);
-      const lngRange = numericRange(2.00, 2.29);
-      return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
-    },
-  };
+CriticalSnake.PostProcessor = function() {
 
   function importApiVersion2DataPoint(dataPoint) {
     const floatCoord = (oldFormat) => {
@@ -50,12 +41,65 @@ CriticalSnake.PostProcessor = function(options) {
     return leafletToGeodesy(c1).bearingTo(leafletToGeodesy(c2));
   }
 
+  CriticalSnake.PostProcessOptions.loadRawTracks =
+  CriticalSnake.PostProcessOptions.loadRawTracks || {};
+
+  this.loadRawTracks = function(dataset) {
+    const opts = CriticalSnake.PostProcessOptions.loadRawTracks;
+
+    const indexMap = {};
+    let nextIndex = 0;
+    const hashToTrackIdx = (hash) => {
+      if (!indexMap.hasOwnProperty(hash)) {
+        indexMap[hash] = nextIndex++;
+      }
+      return indexMap[hash];
+    };
+
+    const pool = [];
+    const tracks = [];
+    let minStamp = 8640000000000000;
+    let maxStamp = 0;
+
+    for (const snapshot in dataset) {
+      for (const participant in dataset[snapshot]) {
+        const dataPoint = importApiVersion2DataPoint(dataset[snapshot][participant]);
+        const dataPointIdx = pool.push(dataPoint) - 1;
+
+        const trackIdx = hashToTrackIdx(participant);
+        if (trackIdx >= tracks.length) {
+          tracks.push([ dataPointIdx ]);
+        } else {
+          tracks[trackIdx].push(dataPointIdx);
+        }
+
+        minStamp = Math.min(minStamp, dataPoint.first_stamp);
+        maxStamp = Math.max(maxStamp, dataPoint.last_stamp);
+      }
+    }
+
+    const timeRange = { begin: new Date(minStamp), end: new Date(maxStamp) };
+    return [pool, tracks, timeRange];
+  }
+
   function isDuplicate(latest, next) {
     if (latest.last_stamp == next.last_stamp)
       return true;
     if (latest.lat == next.lat && latest.lng == next.lng)
       return true;
     return false;
+  }
+
+  function createCoordFilterFromBounds(latLngBounds) {
+    function NumericRange(min, max) {
+      this.contains = (val) => min < val && max > val;
+      return this;
+    }
+    const latRange = new NumericRange(latLngBounds.getSouth(),
+                                      latLngBounds.getNorth());
+    const lngRange = new NumericRange(latLngBounds.getWest(),
+                                      latLngBounds.getEast());
+    return (x) => !latRange.contains(x.lat) || !lngRange.contains(x.lng);
   }
 
   function isRelevantTrack(dataPoints, trackIdxs, options) {
@@ -128,8 +172,11 @@ CriticalSnake.PostProcessor = function(options) {
     return [ tracks, dataPoints ];
   }
 
-  const analyzeTracksOptions = {
-    coordFilter: this.coordFilters.Berlin(),
+  CriticalSnake.PostProcessOptions.analyzeTracks =
+  CriticalSnake.PostProcessOptions.analyzeTracks || {
+    startStamp: 0,
+    endStamp: 8640000000000000,
+    filterBounds: CriticalSnake.FilterBounds.Berlin,
     trackFilter: {
       minDataPoints: 8,
       minDistance: 1000,
@@ -141,8 +188,8 @@ CriticalSnake.PostProcessor = function(options) {
     },
   };
 
-  this.analyzeTracks = function(dataset, options) {
-    const opts = { ...analyzeTracksOptions, ...options };
+  this.analyzeTracks = function(dataset) {
+    const opts = CriticalSnake.PostProcessOptions.analyzeTracks;
 
     const indexMap = {};
     let nextIndex = 0;
@@ -170,12 +217,13 @@ CriticalSnake.PostProcessor = function(options) {
 
     const pool = [];
     const perTrackPoolIdxs = [];
+    const filterCoord = createCoordFilterFromBounds(opts.filterBounds);
 
     for (const snapshot in dataset) {
       for (const participant in dataset[snapshot]) {
         const dataPoint = importApiVersion2DataPoint(dataset[snapshot][participant]);
 
-        if (opts.coordFilter(dataPoint)) {
+        if (filterCoord(dataPoint)) {
           filteredOutOfRange += 1;
           continue;
         }
@@ -443,7 +491,8 @@ CriticalSnake.PostProcessor = function(options) {
     return createCircle(latLng, matches, circles, dataPoints);
   }
 
-  const detectCirclesOptions = {
+  CriticalSnake.PostProcessOptions.detectCircles =
+  CriticalSnake.PostProcessOptions.detectCircles || {
     tolerance: {
       latitude: 0.001,
       longitude: 0.002,
@@ -456,8 +505,8 @@ CriticalSnake.PostProcessor = function(options) {
     skipSamplingThreshold: 0,
   };
 
-  this.detectCircles = function(dataPoints, options) {
-    const opts = { ...detectCirclesOptions, ...options };
+  this.detectCircles = function(dataPoints) {
+    const opts = CriticalSnake.PostProcessOptions.detectCircles;
     const circleIdxs = dataPoints.map(_ => new Set());
 
     const pointsInTime = ConvexEnvelopeSearch(dataPoints, binarySearch);
@@ -509,14 +558,15 @@ CriticalSnake.PostProcessor = function(options) {
     return circles;
   }; // CriticalSnake.PostProcessor.detectCircles()
 
-  const associateSnakesOptions = {
+  CriticalSnake.PostProcessOptions.associateSnakes =
+  CriticalSnake.PostProcessOptions.associateSnakes || {
     startTime: null,
     expectedNumberOfSnakes: -1,
     maxDistance: 2000,
   };
 
-  this.associateSnakes = function(dataPoints, circles, options) {
-    const opts = { ...associateSnakesOptions, ...options };
+  this.associateSnakes = function(dataPoints, circles) {
+    const opts = CriticalSnake.PostProcessOptions.associateSnakes;
     const snakes = circles.map(_ => new Set());
 
     const snakeOrigins = [];
@@ -584,13 +634,14 @@ CriticalSnake.PostProcessor = function(options) {
     return true;
   };
 
-  const populateTrackSegmentsOptions = {
+  CriticalSnake.PostProcessOptions.populateTrackSegments =
+  CriticalSnake.PostProcessOptions.populateTrackSegments || {
     minSegmentLength: 10,
     bridgeGapsLookahead: 5,
   };
 
-  this.populateTrackSegments = function(dataPoints, tracks, circles, options) {
-    const opts = { ...populateTrackSegmentsOptions, ...options };
+  this.populateTrackSegments = function(dataPoints, tracks, circles) {
+    const opts = CriticalSnake.PostProcessOptions.populateTrackSegments;
 
     const nextSegment = (track, begin) => {
       const indexes = (i) => dataPoints[track[i]].circleIdxs;
@@ -658,6 +709,8 @@ CriticalSnake.PostProcessor = function(options) {
       end: new Date(maxLastStamp(circles, snakeIdxs)),
     };
   }; // CriticalSnake.PostProcessor.getTimeRange()
+
+  return this;
 
 }; // CriticalSnake.PostProcessor
 
