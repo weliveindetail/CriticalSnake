@@ -4,6 +4,13 @@
 // are populated when creating a CriticalSnake.PostProcessor().
 CriticalSnake.PostProcessOptions = {};
 
+CriticalSnake.mergePostProcessOptions = function(incoming) {
+  // In lodash's merge implementation, the latest occurrence of a duplicate key
+  // takes precedence.
+  CriticalSnake.PostProcessOptions =
+      _.merge(CriticalSnake.PostProcessOptions, incoming);
+};
+
 CriticalSnake.FilterBounds = {
   Berlin: L.latLngBounds([52.40, 13.23], [52.61, 13.56]),
   Barcelona: L.latLngBounds([41.26, 2.00], [41.45, 2.29]),
@@ -41,8 +48,9 @@ CriticalSnake.PostProcessor = function() {
     return leafletToGeodesy(c1).bearingTo(leafletToGeodesy(c2));
   }
 
-  CriticalSnake.PostProcessOptions.loadRawTracks =
-  CriticalSnake.PostProcessOptions.loadRawTracks || {};
+  CriticalSnake.mergePostProcessOptions({
+    loadRawTracks: {}
+  });
 
   this.loadRawTracks = function(dataset) {
     const opts = CriticalSnake.PostProcessOptions.loadRawTracks;
@@ -172,21 +180,22 @@ CriticalSnake.PostProcessor = function() {
     return [ tracks, dataPoints ];
   }
 
-  CriticalSnake.PostProcessOptions.analyzeTracks =
-  CriticalSnake.PostProcessOptions.analyzeTracks || {
-    startStamp: 0,
-    endStamp: 8640000000000000,
-    filterBounds: CriticalSnake.FilterBounds.Berlin,
-    trackFilter: {
-      minDataPoints: 8,
-      minDistance: 1000,
-      minDuration: 5 * 60 * 1000,
-    },
-    splitConditions : {
-      maxGapDuration: 5 * 60 * 1000,
-      maxGapDistance: 1000,
-    },
-  };
+  CriticalSnake.mergePostProcessOptions({
+    analyzeTracks: {
+      startStamp: 0,
+      endStamp: 8640000000000000,
+      filterName: "Berlin",
+      trackFilter: {
+        minDataPoints: 8,
+        minDistance: 1000,
+        minDuration: 5 * 60 * 1000,
+      },
+      splitConditions : {
+        maxGapDuration: 5 * 60 * 1000,
+        maxGapDistance: 1000,
+      },
+    }
+  });
 
   this.analyzeTracks = function(dataset) {
     const opts = CriticalSnake.PostProcessOptions.analyzeTracks;
@@ -217,7 +226,8 @@ CriticalSnake.PostProcessor = function() {
 
     const pool = [];
     const perTrackPoolIdxs = [];
-    const filterCoord = createCoordFilterFromBounds(opts.filterBounds);
+    const filterBounds = CriticalSnake.FilterBounds[opts.filterName];
+    const filterCoord = createCoordFilterFromBounds(filterBounds);
 
     for (const snapshot in dataset) {
       for (const participant in dataset[snapshot]) {
@@ -491,19 +501,20 @@ CriticalSnake.PostProcessor = function() {
     return createCircle(latLng, matches, circles, dataPoints);
   }
 
-  CriticalSnake.PostProcessOptions.detectCircles =
-  CriticalSnake.PostProcessOptions.detectCircles || {
-    tolerance: {
-      latitude: 0.001,
-      longitude: 0.002,
-      timeBefore: 5 * 60 * 1000,
-      timeAfter: 10 * 60 * 1000,
-      direction: 45,
-    },
-    samplePointDist: 100,
-    minDataPointMatches: 5,
-    skipSamplingThreshold: 0,
-  };
+  CriticalSnake.mergePostProcessOptions({
+    detectCircles: {
+      tolerance: {
+        latitude: 0.001,
+        longitude: 0.002,
+        timeBefore: 5 * 60 * 1000,
+        timeAfter: 10 * 60 * 1000,
+        direction: 45,
+      },
+      samplePointDist: 100,
+      minDataPointMatches: 5,
+      skipSamplingThreshold: 0,
+    }
+  });
 
   this.detectCircles = function(dataPoints) {
     const opts = CriticalSnake.PostProcessOptions.detectCircles;
@@ -558,12 +569,13 @@ CriticalSnake.PostProcessor = function() {
     return circles;
   }; // CriticalSnake.PostProcessor.detectCircles()
 
-  CriticalSnake.PostProcessOptions.associateSnakes =
-  CriticalSnake.PostProcessOptions.associateSnakes || {
-    startTime: null,
-    expectedNumberOfSnakes: -1,
-    maxDistance: 2000,
-  };
+  CriticalSnake.mergePostProcessOptions({
+    associateSnakes: {
+      startTime: null,
+      expectedNumberOfSnakes: -1,
+      maxDistance: 2000,
+    }
+  });
 
   this.associateSnakes = function(dataPoints, circles) {
     const opts = CriticalSnake.PostProcessOptions.associateSnakes;
@@ -634,11 +646,12 @@ CriticalSnake.PostProcessor = function() {
     return true;
   };
 
-  CriticalSnake.PostProcessOptions.populateTrackSegments =
-  CriticalSnake.PostProcessOptions.populateTrackSegments || {
-    minSegmentLength: 10,
-    bridgeGapsLookahead: 5,
-  };
+  CriticalSnake.mergePostProcessOptions({
+    populateTrackSegments: {
+      minSegmentLength: 10,
+      bridgeGapsLookahead: 5,
+    }
+  });
 
   this.populateTrackSegments = function(dataPoints, tracks, circles) {
     const opts = CriticalSnake.PostProcessOptions.populateTrackSegments;

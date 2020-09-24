@@ -62,9 +62,11 @@
   <script src="3rd-party/lzstring14/lz-string.min.js"></script>
   <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
   <script src="3rd-party/nouislider14/nouislider.min.js"></script>
+  <script src="3rd-party/lodash417/lodash.min.js"></script>
 
-  <script src="critical-snake/bikemap.js"></script>
   <script src="critical-snake/critical-snake.js"></script>
+  <script src="critical-snake/bikemap.js"></script>
+  <script src="critical-snake/postprocess-controls.js"></script>
 
   <script>
     function parseUrlParams(url) {
@@ -82,8 +84,12 @@
     bikeMap.browseGroup.show();
     bikeMap.loadingGroup.hide();
     bikeMap.playbackGroup.hide();
-    bikeMap.postprocessGroup.hide();
     bikeMap.statsLabel.hide();
+
+    bikeMap.postprocessGroup = new L.Control.PostprocessGroup(bikeMap, {
+      position: 'topright',
+      filterNames: Object.keys(CriticalSnake.FilterBounds),
+    });
 
     let playbackFrameIdx = 0;
     let playbackDataset = null;
@@ -115,6 +121,7 @@
       // Validate selection and set visual indication for the loading progress.
       bikeMap.browseGroup.hide();
       bikeMap.loadingGroup.show();
+      bikeMap.postprocessGroup.remove();
 
       if (this.files.length == 0)
         return;
@@ -127,9 +134,14 @@
         try {
           playbackRecording = this.files[0].name;
           playbackRawDataset = decompressDataset(event.target.result);
+
           loadRawTracks(playbackRawDataset);
           bikeMap.statsLabel.show();
           bikeMap.playbackGroup.show();
+
+          restoreOptions();
+          bikeMap.postprocessGroup.addTo(bikeMap);
+          bikeMap.postprocessGroup.reset(CriticalSnake);
           bikeMap.postprocessGroup.show();
         }
         catch (ex) {
@@ -144,40 +156,65 @@
       setTimeout(() => reader.readAsText(this.files[0]), 10);
     });
 
-    bikeMap.selectTimeRangeSlider.change(function(event, timeRange) {
-      console.log(timeRange);
-      if (Object.keys(CriticalSnake.PostProcessOptions).length == 0)
-        return;
-
+    bikeMap.postprocessGroup.timeRangeChanged = function(timeRange) {
       // Overwrite post-process parameters from control values in the global
       // `CriticalSnake.PostProcessOptions` instead of passing them to the
       // individual functions. It allows users to query and modify them easily
       // from the browser's debug console.
-      const analyzeTracks = CriticalSnake.PostProcessOptions.analyzeTracks;
-      analyzeTracks.startStamp = timeRange.start;
-      analyzeTracks.endStamp = timeRange.end;
+      CriticalSnake.mergePostProcessOptions({
+        analyzeTracks: {
+          startStamp: timeRange.start,
+          endStamp: timeRange.end,
+        },
+        associateSnakes: {
+          startTime: timeRange.origins,
+        },
+      });
+    };
 
-      const associateSnakes = CriticalSnake.PostProcessOptions.associateSnakes;
-      associateSnakes.startTime = timeRange.origins;
-    });
-
-    bikeMap.selectLocationFilter.change(function() {
-      const val = bikeMap.selectLocationFilter.val();
-      console.log(val);
-      console.log(CriticalSnake.FilterBounds[bikeMap.selectLocationFilter.val()]);
-
+    bikeMap.postprocessGroup.locationFilterChanged = function(val) {
       if (!CriticalSnake.FilterBounds.hasOwnProperty(val)) {
-        console.error(`Invalid option: unknown filter-bounds '${val}'`);
+        console.error("Invalid option: unknown filter-bounds", val);
         return;
       }
 
-      const analyzeTracks = CriticalSnake.PostProcessOptions.analyzeTracks;
-      analyzeTracks.filterBounds = CriticalSnake.FilterBounds[val];
+      console.log("Set data-point filter to", val);
+      CriticalSnake.mergePostProcessOptions({
+        analyzeTracks: { filterName: val },
+      });
 
-      bikeMap.panTo(analyzeTracks.filterBounds.getCenter());
-    });
+      const filterBounds = CriticalSnake.FilterBounds[val];
+      bikeMap.panTo(filterBounds.getCenter());
+    };
 
-    bikeMap.postprocessButton.click(function() {
+    bikeMap.postprocessGroup.storeOptionsClicked = function() {
+      // Query existing options.
+      const key = "CriticalSnake.PostProcessOptions";
+      const val = localStorage.getItem(key);
+      const opts = val ? JSON.parse(val) : {};
+
+      // Add/overwrite options for the current recoring.
+      opts[playbackRecording] = CriticalSnake.PostProcessOptions;
+      localStorage.setItem(key, JSON.stringify(opts));
+
+      console.log("Stored options for file", playbackRecording,
+                  "in localStorage:", CriticalSnake.PostProcessOptions);
+    };
+
+    function restoreOptions() {
+      const key = "CriticalSnake.PostProcessOptions";
+      const val = localStorage.getItem(key);
+      const opts = val ? JSON.parse(val) : {};
+
+      if (opts.hasOwnProperty(playbackRecording)) {
+        console.log("Restoring options for file", playbackRecording);
+        CriticalSnake.mergePostProcessOptions(opts[playbackRecording]);
+      } else {
+        console.log("No options stored for file", playbackRecording);
+      }
+    }
+
+    bikeMap.postprocessGroup.postprocessClicked = function() {
       bikeMap.postprocessGroup.hide();
       bikeMap.playbackGroup.hide();
       bikeMap.statsLabel.hide();
@@ -189,8 +226,6 @@
           postprocessRecording(playbackRawDataset, {});
           bikeMap.statsLabel.show();
           bikeMap.playbackGroup.show();
-          bikeMap.updateTimeRangeOptions();
-          bikeMap.selectLocationFilter.trigger("change");
         }
         catch (ex) {
           console.error("Postprocessing failed:", ex);
@@ -198,7 +233,7 @@
         bikeMap.loadingGroup.hide();
         bikeMap.postprocessGroup.show();
       }, 10);
-    });
+    };
 
     bikeMap.downloadButton.click(function() {
       bikeMap.playbackGroup.hide();
@@ -256,12 +291,14 @@
       };
 
       const duration = playbackDataset.end - playbackDataset.begin;
-      bikeMap.percentToTimestamp = (percent) => {
+      bikeMap.postprocessGroup.percentToTimestamp = (percent) => {
         const offset = Math.round(duration * parseFloat(percent) / 100);
         return playbackDataset.begin + offset;
       };
-
-      bikeMap.updateTimeRangeOptions();
+      bikeMap.postprocessGroup.timestampToPercent = (timestamp) => {
+        const offset = (timestamp - playbackDataset.begin);
+        return (offset / duration) * 100;
+      };
 
       playbackFrameIdx = 0;
       refreshView(playbackFrameIdx);

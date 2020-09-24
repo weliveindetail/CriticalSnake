@@ -133,106 +133,10 @@ function createBikeMap(L, options) {
     },
   });
 
-  L.Control.PostprocessGroup = L.Control.extend({
-    onAdd: function() {
-      const postprocessGroup = L.DomUtil.create('div', 'leaflet-bar');
-      postprocessGroup.id = "postprocessGroup";
-      postprocessGroup.style.display = "block";
-      postprocessGroup.style.backgroundColor = "#fff";
-      postprocessGroup.style.padding = "1rem";
-
-      const selectLocationFilterLabel = L.DomUtil.create('label', '', postprocessGroup);
-      selectLocationFilterLabel.innerHTML = "Select location filter:";
-      selectLocationFilterLabel.id = "selectLocationFilterLabel";
-      selectLocationFilterLabel.style.padding = "0 3px";
-
-      const selectLocationFilter = L.DomUtil.create('select', '', postprocessGroup);
-      selectLocationFilter.id = "selectLocationFilter";
-      selectLocationFilter.style.display = "block";
-      selectLocationFilter.style.margin = "3px 3px 10px";
-      selectLocationFilter.style.width = "calc(100% - 7px)";
-
-      for (const filter in CriticalSnake.FilterBounds) {
-        const opt = L.DomUtil.create('option', '', selectLocationFilter);
-        opt.text = filter;
-        opt.value = filter;
-      }
-
-      const selectTimeRangeLabel = L.DomUtil.create('label', '', postprocessGroup);
-      selectTimeRangeLabel.innerHTML = "Select time-range:";
-      selectTimeRangeLabel.id = "selectTimeRangeLabel";
-      selectTimeRangeLabel.style.padding = "0 3px";
-
-      const selectTimeRangeSlider = L.DomUtil.create("div", "", postprocessGroup);
-      selectTimeRangeSlider.id = "selectTimeRangeSlider";
-      selectTimeRangeSlider.style.width = "200px";
-      selectTimeRangeSlider.style.margin = "0.75rem";
-
-      bikeMap.percentToTimestamp = (percent) => percent;
-      const toolTipFmt = (prefix) => ({
-        to: val => {
-          const pad2 = (val) => (val < 10 ? "0" : "") + val;
-          const d = new Date(bikeMap.percentToTimestamp(val));
-          return `${prefix}: ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
-        }
-      });
-
-      noUiSlider.create(selectTimeRangeSlider, {
-        start: [0, 10, 100],
-        connect: true,
-        tooltips: [toolTipFmt("Start"), toolTipFmt("Origins"), toolTipFmt("End")],
-        range: { 'min': 0, 'max': 100 }
-      });
-
-      bikeMap.updateTimeRangeOptions = () => {
-        const values = selectTimeRangeSlider.noUiSlider.get();
-
-        // Here we use the jQuery element that's assigned in the end of
-        // createBikeMap() in order to trigger the event on the client side.
-        // It's quite a hack, but fine for now.
-        bikeMap.selectTimeRangeSlider.trigger("change", {
-          start: bikeMap.percentToTimestamp(parseFloat(values[0])),
-          origins: bikeMap.percentToTimestamp(parseFloat(values[1])),
-          end: bikeMap.percentToTimestamp(parseFloat(values[2])),
-        });
-      }
-
-      for (const tooltip of selectTimeRangeSlider.noUiSlider.getTooltips()) {
-        tooltip.style.display = "none";
-      }
-      selectTimeRangeSlider.noUiSlider.on("start", (values, handleIdx) => {
-        const tooltips = selectTimeRangeSlider.noUiSlider.getTooltips();
-        tooltips[handleIdx].style.display = "block";
-      });
-      selectTimeRangeSlider.noUiSlider.on("end", (values, handleIdx) => {
-        bikeMap.updateTimeRangeOptions();
-        const tooltips = selectTimeRangeSlider.noUiSlider.getTooltips();
-        tooltips[handleIdx].style.display = "none";
-      });
-      selectTimeRangeSlider.noUiSlider.on("change", (values, handleIdx) => {
-        bikeMap.updateTimeRangeOptions();
-      });
-
-      const postprocessButton = L.DomUtil.create("input", "", postprocessGroup);
-      postprocessButton.id = "postprocessButton";
-      postprocessButton.type = "button";
-      postprocessButton.value = "Run post-processor";
-      postprocessButton.style.marginTop = "2em";
-
-      // Stopping event propagation for the parent Leaflet bar works well with
-      // builtin controls, but currently breaks the drag functionality of the
-      // NoUiSlider. So for now, we don't do it for this control group.
-      //controlGroups.push(postprocessGroup);
-
-      return postprocessGroup;
-    }
-  });
-
   (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
   (new L.Control.BrowseGroup({ position: 'bottomleft' })).addTo(bikeMap);
   (new L.Control.LoadingGroup({ position: 'bottomleft' })).addTo(bikeMap);
   (new L.Control.PlaybackGroup({ position: 'bottomleft' })).addTo(bikeMap);
-  (new L.Control.PostprocessGroup({ position: 'topright' })).addTo(bikeMap);
   (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
 
   bikeMap.statsLabel = $("#statsLabel");
@@ -250,11 +154,6 @@ function createBikeMap(L, options) {
   bikeMap.historySlider = $("#historySlider");
   bikeMap.fpsInput = $("#fpsInput");
   bikeMap.fpsLabel = $("#fpsLabel");
-
-  bikeMap.postprocessGroup = $("#postprocessGroup");
-  bikeMap.selectTimeRangeSlider = $("#selectTimeRangeSlider");
-  bikeMap.selectLocationFilter = $("#selectLocationFilter");
-  bikeMap.postprocessButton = $("#postprocessButton");
 
   const mouseEvents = "mouseup mousedown mousemove mousewheel";
   const touchEvents = "touchstart touchend touchmove";
