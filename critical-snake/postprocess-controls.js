@@ -149,7 +149,14 @@ L.Control.PostprocessGroup = L.Control.extend({
         snakeOpts.startTime,
         trackOpts.endStamp,
       ];
-      this.timeRangeSlider.noUiSlider.set(stamps.map(this.timestampToPercent));
+      const percents = stamps.map(this.timestampToPercent);
+      this.timeRangeSlider.noUiSlider.set(percents);
+
+      this.timeRangeChanged({
+        start: trackOpts.startStamp,
+        origins: snakeOpts.startTime,
+        end: trackOpts.endStamp,
+      });
     }
   },
 

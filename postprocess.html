@@ -116,6 +116,7 @@
       console.log("FPS changed to", playbackFPS);
     });
 
+    let rawDataset = {};
     let playbackRecording = null;
     bikeMap.browseButton.change(function() {
       // Validate selection and set visual indication for the loading progress.
@@ -133,9 +134,9 @@
       $(reader).on('load', (event) => {
         try {
           playbackRecording = this.files[0].name;
-          playbackRawDataset = decompressDataset(event.target.result);
+          const snapshots = decompressDataset(event.target.result);
 
-          loadRawTracks(playbackRawDataset);
+          loadRawTracks(snapshots);
           bikeMap.statsLabel.show();
           bikeMap.playbackGroup.show();
 
@@ -223,7 +224,7 @@
       // Give the UI a chance to refresh and show the loading state.
       setTimeout(() => {
         try {
-          postprocessRecording(playbackRawDataset, {});
+          postprocessRecording();
           bikeMap.statsLabel.show();
           bikeMap.playbackGroup.show();
         }
@@ -260,55 +261,59 @@
 
     // ----------------------------------------------------
 
-    function decompressDataset(compressedDataSet) {
+    function decompressDataset(compressedSnapshots) {
       const kilobyte = (str) => Math.round((str.length * 2) / 1024);
 
       const decompressionBegin = Date.now();
-      const rawDataSet = LZString.decompressFromUTF16(compressedDataSet);
-      console.log("Compressed size is:", kilobyte(compressedDataSet), "KB");
-      console.log("Decompressed size is:", kilobyte(rawDataSet), "KB");
+      const snapshots = LZString.decompressFromUTF16(compressedSnapshots);
+      console.log("Compressed size is:", kilobyte(compressedSnapshots), "KB");
+      console.log("Decompressed size is:", kilobyte(snapshots), "KB");
       console.log("Decompression took:", Date.now() - decompressionBegin, "ms");
 
-      return JSON.parse(rawDataSet);
+      return JSON.parse(snapshots);
     }
 
-    function loadRawTracks(rawDataSet) {
+    function loadRawTracks(snapshots) {
       const PostProcessor = new CriticalSnake.PostProcessor();
 
       const loadRawTracksBegin = Date.now();
-      const [ dataPoints, tracks, timeRange ] = PostProcessor.loadRawTracks(rawDataSet);
+      const [ dataPoints, tracks, timeRange ] = PostProcessor.loadRawTracks(snapshots);
       console.log("Data-points:", dataPoints);
       console.log("Tracks:", tracks);
       console.log("Loading raw tracks took:", Date.now() - loadRawTracksBegin, "ms");
       console.log("Data covers time range\nfrom:", timeRange.begin, "\nto:", timeRange.end);
 
-      const minute = 60 * 1000;
+      rawDataset.snapshots = snapshots;
+      rawDataset.begin = timeRange.begin.getTime();
+      rawDataset.end = timeRange.end.getTime();
+
+      const duration = rawDataset.end - rawDataset.begin;
+      bikeMap.postprocessGroup.percentToTimestamp = (percent) => {
+        const offset = Math.round(duration * parseFloat(percent) / 100);
+        return rawDataset.begin + offset;
+      };
+      bikeMap.postprocessGroup.timestampToPercent = (timestamp) => {
+        const offset = (timestamp - rawDataset.begin);
+        return (offset / duration) * 100;
+      };
+
+      // Allow to playback raw data for convenience
+      console.assert(playbackDataset == null);
       playbackDataset = {
         dataPoints: dataPoints,
         tracks: tracks,
-        begin: timeRange.begin.getTime() - 5 * minute,
-        end: timeRange.end.getTime(),
-      };
-
-      const duration = playbackDataset.end - playbackDataset.begin;
-      bikeMap.postprocessGroup.percentToTimestamp = (percent) => {
-        const offset = Math.round(duration * parseFloat(percent) / 100);
-        return playbackDataset.begin + offset;
-      };
-      bikeMap.postprocessGroup.timestampToPercent = (timestamp) => {
-        const offset = (timestamp - playbackDataset.begin);
-        return (offset / duration) * 100;
+        begin: rawDataset.begin,
+        end: rawDataset.end,
       };
 
       playbackFrameIdx = 0;
       refreshView(playbackFrameIdx);
     };
 
-    function postprocessRecording(rawDataSet) {
-      const PostProcessor = new CriticalSnake.PostProcessor();
-
+    const PostProcessor = new CriticalSnake.PostProcessor();
+    function postprocessRecording() {
       const analyzeTracksBegin = Date.now();
-      const [ tracks, dataPoints ] = PostProcessor.analyzeTracks(rawDataSet);
+      const [ tracks, dataPoints ] = PostProcessor.analyzeTracks(rawDataset.snapshots);
       console.log("Data-points:", dataPoints);
       console.log("Analyzing tracks took:", Date.now() - analyzeTracksBegin, "ms");
 
@@ -328,16 +333,15 @@
       console.log("Segments:", segments);
       console.log("Populating track segments took:", Date.now() - populateTrackSegmentsBegin, "ms");
 
-      const minute = 60 * 1000;
       const timeRange = PostProcessor.getTimeRange(circles);
-      console.log("Data covers time range\nfrom:", timeRange.begin, "\nto:", timeRange.end);
+      console.log("Data covers time range from/to:\n", timeRange.begin, "\n", timeRange.end);
 
       playbackDataset = {
         dataPoints: dataPoints,
         circles: circles,
         tracks: tracks,
         segments: segments,
-        begin: timeRange.begin.getTime() - 5 * minute,
+        begin: timeRange.begin.getTime(),
         end: timeRange.end.getTime(),
       };
 

@@ -222,19 +222,30 @@ CriticalSnake.PostProcessor = function() {
     }
 
     let filteredDupes = 0;
-    let filteredOutOfRange = 0;
+    let filteredCoordOutOfBounds = 0;
+    let filteredTimeOutOfBounds = 0;
 
     const pool = [];
     const perTrackPoolIdxs = [];
     const filterBounds = CriticalSnake.FilterBounds[opts.filterName];
     const filterCoord = createCoordFilterFromBounds(filterBounds);
 
+    const filterTime = (dataPoint) => {
+      return dataPoint.first_stamp < opts.startStamp ||
+             dataPoint.last_stamp > opts.endStamp;
+    };
+
     for (const snapshot in dataset) {
       for (const participant in dataset[snapshot]) {
         const dataPoint = importApiVersion2DataPoint(dataset[snapshot][participant]);
 
         if (filterCoord(dataPoint)) {
-          filteredOutOfRange += 1;
+          filteredCoordOutOfBounds += 1;
+          continue;
+        }
+
+        if (filterTime(dataPoint)) {
+          filteredTimeOutOfBounds += 1;
           continue;
         }
 
@@ -276,7 +287,8 @@ CriticalSnake.PostProcessor = function() {
                                 relevantTracks.flat().length;
 
     console.log("Filtered", filteredDupes, "duplicate data points");
-    console.log("Filtered", filteredOutOfRange, "data points outside area of interest");
+    console.log("Filtered", filteredCoordOutOfBounds, "data points outside area of interest");
+    console.log("Filtered", filteredTimeOutOfBounds, "data points outside time-range");
     console.log("Filtered", filteredIrrelTracks, "data points from irrelevant tracks");
 
     return reindexTracks(pool, relevantTracks);
