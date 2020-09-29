@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>CriticalSnake Recorder</title>
-  <link rel="stylesheet" href="3rd-party/newcss11/new.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 
   <style>
@@ -212,9 +212,45 @@
 
     function download(content) {
       const [ data, extension ] = deduceType(content);
+      const filename = `${formatDate()}_${formatTime()}.${extension}`;
+      console.log("Starting download for", filename);
+
       const blob = new Blob([data], {type: "text/plain;charset=utf-16"});
-      saveAs(blob, `${formatDate()}_${formatTime()}.${extension}`);
+      saveAs(blob, filename);
     }
+
+    function asciiBanner() {
+      return String.raw`
+  _____      _ _   _           _  _____             _
+ / ____|    (_) | (_)         | |/ ____|           | |
+| |     _ __ _| |_ _  ___ __ _| | (___  _ __   __ _| | _____
+| |    | '__| | __| |/ __/ _' | |\___ \| '_ \ / _' | |/ / _ \
+| |____| |  | | |_| | (_| (_| | |____) | | | | (_| |   <  __/
+ \_____|_|  |_|\__|_|\___\__,_|_|_____/|_| |_|\__,_|_|\_\___| Recorder
+
+`;
+    }
+
+    function dumpUsage() {
+      console.log(asciiBanner());
+      console.log(
+        "Welcome to the CriticalSnake Recorder. The graphical user-interface",
+        "provides a minimal toolset for recordings with a focus on simplicty",
+        "and reliability. On top of that, the interactive console gives you",
+        "full access and additional control over the process.");
+      console.log(
+        "\nExamples:\n",
+        "\n* Store intermediate backups of your recording",
+        "\n  https://github.com/weliveindetail/CriticalSnake/blob/master/docs/record.md#example-store-intermediate-backups-of-your-recording",
+        "\n",
+        "\n");
+
+      console.warn("The project is still work-in-progress and contributions of",
+                   "any kind are welcome. Please report bugs at",
+                   "https://github.com/weliveindetail/CriticalSnake/issues");
+    }
+
+    dumpUsage();
   </script>
 </body>
 </html>
