@@ -6,6 +6,8 @@
 
   <title>CriticalSnake Recorder</title>
   <link rel="stylesheet" href="3rd-party/newcss11/new.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
   <style>
     body {
       margin: 0;
@@ -39,6 +41,7 @@
 <body>
   <div class="panel">
     <button id="nextButton">
+      <i id="spinner"></i>
       <label id="nextButtonLabel"></label>
     </button>
     <div>
@@ -56,14 +59,23 @@
   <script src="3rd-party/lzstring14/lz-string.min.js"></script>
 
   <script>
-    const controls = ["nextButton", "nextButtonLabel", "intervalField",
-                      "urlField", "output"];
+    const controls = ["nextButton", "nextButtonLabel", "spinner",
+                      "intervalField", "urlField", "output"];
 
     const panel = {};
     controls.forEach(id => { panel[id] = document.getElementById(id); });
 
     function setButtonState(state) {
-      panel.nextButtonLabel.innerText = state;
+      const spinClasses = ["fa", "fa-spinner", "fa-spin"].join(" ");
+      if (state == "Loading") {
+        panel.nextButtonLabel.innerText = "";
+        panel.spinner.className = spinClasses;
+        panel.spinner.style.display = "inline-block";
+      } else {
+        panel.spinner.style.display = "none";
+        panel.spinner.className = spinClasses;
+        panel.nextButtonLabel.innerText = state;
+      }
     }
 
     function getButtonState() {
