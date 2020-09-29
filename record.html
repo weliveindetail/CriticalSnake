@@ -91,26 +91,30 @@
           panel.urlField.disabled = true;
           panel.urlField.style.color = "#888";
           panel.output.style.display = "block";
+          panel.output.innerText = "";
           startRecording(panel.intervalField.value, panel.urlField.value);
           setButtonState("Finish");
           return;
         case "Finish":
           setButtonState("Loading");
-          const formattedOutput = finishRecording(panel.output.innerText);
-          panel.output.innerText = formattedOutput;
+          panel.output.innerText = finishRecording();
           setButtonState("Download");
           return;
         case "Download":
           setButtonState("Loading");
-          const blob = createCompressedBlob(panel.output.innerText);
+          const blob = compressRecording();
           setButtonState("Download");
-          saveAs(blob, `${formatDate()}_${formatTime()}.recording`);
+          download(blob);
           return;
         case "Loading":
           console.warn("Please wait until the processed finished");
           return;
       }
     });
+
+    function print(txt) {
+      panel.output.append(txt);
+    }
 
     function formatDate(timestamp) {
       const d = timestamp ? new Date(timestamp * 1000) : new Date();
@@ -123,24 +127,6 @@
       const pad2 = (val) => (val < 10 ? "0" : "") + val;
       return `${pad2(d.getHours())}-${pad2(d.getMinutes())}-${pad2(d.getSeconds())}`
     };
-
-    function print(txt) {
-      panel.output.append(txt);
-    }
-
-    function appendSnapshot(data) {
-      print(`"${formatDate()}_${formatTime()}":{`);
-      let goddamntrailingcomma = "";
-      for (const hash in data.locations) {
-        print(`${goddamntrailingcomma}"${hash}":{` +
-          `"timestamp":${data.locations[hash].timestamp},` +
-          `"latitude":${data.locations[hash].latitude},` +
-          `"longitude":${data.locations[hash].longitude}` +
-        `}`);
-        goddamntrailingcomma = ",";
-      }
-      print('},\n');
-    }
 
     let fetchTimer = null;
     function startRecording(interval, url) {
@@ -175,25 +161,59 @@
       });
     }
 
-    function finishRecording(rawOutput) {
-      clearInterval(fetchTimer);
-
-      // Drop trailling comma, wrap in curly braces and parse as JSON.
-      const json = JSON.parse("{" + rawOutput.slice(0, -2) + "}");
-      console.log("Finished recording. Snapshots:", json);
-
-      // Human-readable format with indentation of 2 spaces.
-      return JSON.stringify(json, null, 2);
+    function filterMapEntries(map, allowed) {
+      for (const hash in map)
+        map[hash] = Object.keys(map[hash])
+                          .filter(key => allowed.includes(key))
+                          .reduce((obj, key) => {
+                            obj[key] = map[hash][key];
+                            return obj;
+                          }, {});
+      return map;
     }
 
-    function createCompressedBlob(text) {
+    const recording = {};
+    function appendSnapshot(data) {
+      const key = `${formatDate()}_${formatTime()}`;
+      const entries = ["timestamp", "latitude", "longitude"];
+      const value = filterMapEntries(data.locations, entries);
+
+      recording[key] = value;
+      print(`"${key}":${JSON.stringify(value)},\n`);
+    }
+
+    function finishRecording() {
+      clearInterval(fetchTimer);
+      console.log("Finished recording. Snapshots:", recording);
+
+      // Human-readable format with indentation of 2 spaces.
+      return JSON.stringify(recording, null, 2);
+    }
+
+    function compressRecording() {
       const kilobyte = (str) => Math.round((str.length * 2) / 1024);
 
+      const text = JSON.stringify(recording);
       console.log("Raw size is:", kilobyte(text), "KB");
+
       const compressed = LZString.compressToUTF16(text);
       console.log("Compressed size is:", kilobyte(compressed), "KB");
 
-      return new Blob([compressed], {type: "text/plain;charset=utf-16"});
+      return compressed;
+    }
+
+    function deduceType(content) {
+      if (typeof(content) == "object") {
+        return [JSON.stringify(content), "json"];
+      } else {
+        return [content, "recording"];
+      }
+    }
+
+    function download(content) {
+      const [ data, extension ] = deduceType(content);
+      const blob = new Blob([data], {type: "text/plain;charset=utf-16"});
+      saveAs(blob, `${formatDate()}_${formatTime()}.${extension}`);
     }
   </script>
 </body>
