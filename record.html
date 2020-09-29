@@ -18,9 +18,9 @@
       background: #eee;
       padding: 0 5px;
     }
-    div.panel * {
-      margin: 5px 0 5px 5px;
+    div.panel > *, div.panel > div > * {
       display: inline-block;
+      margin: 5px 0 5px 5px;
     }
     div.panel #intervalField {
       width: 5rem;
@@ -38,7 +38,9 @@
 </head>
 <body>
   <div class="panel">
-    <input type="button" value="Record" id="nextButton">
+    <button id="nextButton">
+      <label id="nextButtonLabel"></label>
+    </button>
     <div>
       <label for="intervalField">Interval (sec):</label>
       <input type="number" id="intervalField" value="30" min="10" max="300">
@@ -48,49 +50,54 @@
       <input type="text" id="urlField" value="https://api.criticalmaps.net/postv2">
     </div>
   </div>
-  <pre></pre>
+  <pre id="output"></pre>
 
-  <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
   <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
   <script src="3rd-party/lzstring14/lz-string.min.js"></script>
 
   <script>
-    const panel = {
-      nextButton: $("#nextButton"),
-      intervalField: $("#intervalField"),
-      urlField: $("#urlField"),
-      output: $("pre"),
-    };
+    const controls = ["nextButton", "nextButtonLabel", "intervalField",
+                      "urlField", "output"];
 
-    $(document).ready(function() {
-      panel.nextButton.click(() => {
-        switch (panel.nextButton.val()) {
-          case "Record":
-            panel.output.show();
-            panel.nextButton.val("Finish");
-            panel.intervalField.prop("disabled", true);
-            panel.intervalField.css("color", "#888");
-            panel.urlField.prop("disabled", true);
-            panel.urlField.css("color", "#888");
-            startRecording(panel.intervalField.val(), panel.urlField.val());
-            break;
-          case "Finish":
-            panel.nextButton.val("Download");
-            const formattedOutput = finishRecording(panel.output.text());
-            panel.output.text(formattedOutput);
-            break;
-          case "Download":
-            downloadRecording(panel.output.text());
-            break;
-        }
-      });
+    const panel = {};
+    controls.forEach(id => { panel[id] = document.getElementById(id); });
 
-      panel.intervalField.change(() => {
-        console.log("intervalField", panel.intervalField.val());
-      });
-      panel.urlField.change(() => { // doesn't work
-        console.log("urlField", panel.urlField.val());
-      });
+    function setButtonState(state) {
+      panel.nextButtonLabel.innerText = state;
+    }
+
+    function getButtonState() {
+      return panel.nextButtonLabel.innerText || "Loading";
+    }
+
+    setButtonState("Record");
+    panel.nextButton.addEventListener("click", () => {
+      switch (getButtonState()) {
+        case "Record":
+          panel.intervalField.disabled = true;
+          panel.intervalField.style.color = "#888";
+          panel.urlField.disabled = true;
+          panel.urlField.style.color = "#888";
+          panel.output.style.display = "block";
+          startRecording(panel.intervalField.value, panel.urlField.value);
+          setButtonState("Finish");
+          return;
+        case "Finish":
+          setButtonState("Loading");
+          const formattedOutput = finishRecording(panel.output.innerText);
+          panel.output.innerText = formattedOutput;
+          setButtonState("Download");
+          return;
+        case "Download":
+          setButtonState("Loading");
+          const blob = createCompressedBlob(panel.output.innerText);
+          setButtonState("Download");
+          saveAs(blob, `${formatDate()}_${formatTime()}.recording`);
+          return;
+        case "Loading":
+          console.warn("Please wait until the processed finished");
+          return;
+      }
     });
 
     function formatDate(timestamp) {
@@ -109,34 +116,18 @@
       panel.output.append(txt);
     }
 
-    function verifyResponse(url, data) {
-      if (!data) {
-        console.error("Error querying data from ${url}");
-        return false;
+    function appendSnapshot(data) {
+      print(`"${formatDate()}_${formatTime()}":{`);
+      let goddamntrailingcomma = "";
+      for (const hash in data.locations) {
+        print(`${goddamntrailingcomma}"${hash}":{` +
+          `"timestamp":${data.locations[hash].timestamp},` +
+          `"latitude":${data.locations[hash].latitude},` +
+          `"longitude":${data.locations[hash].longitude}` +
+        `}`);
+        goddamntrailingcomma = ",";
       }
-      if (!data["locations"] || data["locations"] === {}) {
-        console.warn("No locations in response data");
-        return false;
-      }
-      return true;
-    }
-
-    function fetchData(url) {
-      $.getJSON(url, data => {
-        if (verifyResponse(url, data)) {
-          print(`"${formatDate()}_${formatTime()}":{`);
-          let goddamntrailingcomma = "";
-          for (const hash in data.locations) {
-            print(`${goddamntrailingcomma}"${hash}":{` +
-              `"timestamp":${data.locations[hash].timestamp},` +
-              `"latitude":${data.locations[hash].latitude},` +
-              `"longitude":${data.locations[hash].longitude}` +
-            `}`);
-            goddamntrailingcomma = ",";
-          }
-          print('},\n');
-        }
-      });
+      print('},\n');
     }
 
     let fetchTimer = null;
@@ -148,25 +139,49 @@
       console.log("Start recording", url, "with interval:", seconds * 1000);
 
       fetchData(url);
-      fetchTimer = setInterval(() => fetchData(url), milliSecs);
+      fetchTimer = setInterval(() => fetchData(url), seconds * 1000);
+    }
+
+    // Expecting a CORS-enabled endpoint, so reponse header should include:
+    // { access-control-allow-origin: *, ... }
+    function fetchData(url) {
+      fetch(url).then(async (response) => {
+        if (!response.ok)
+          throw response.status;
+
+        const data = await response.json();
+        if (!data["locations"] || data["locations"] === {}) {
+          console.warn("No locations in response data");
+        }
+        else {
+          // Success
+          appendSnapshot(data);
+        }
+      })
+      .catch(err => {
+        console.error("Error querying data from", url, ":", err);
+      });
     }
 
     function finishRecording(rawOutput) {
       clearInterval(fetchTimer);
+
+      // Drop trailling comma, wrap in curly braces and parse as JSON.
       const json = JSON.parse("{" + rawOutput.slice(0, -2) + "}");
+      console.log("Finished recording. Snapshots:", json);
+
+      // Human-readable format with indentation of 2 spaces.
       return JSON.stringify(json, null, 2);
     }
 
-    function downloadRecording(text) {
+    function createCompressedBlob(text) {
       const kilobyte = (str) => Math.round((str.length * 2) / 1024);
 
       console.log("Raw size is:", kilobyte(text), "KB");
       const compressed = LZString.compressToUTF16(text);
       console.log("Compressed size is:", kilobyte(compressed), "KB");
 
-      const filename = `${formatDate()}_${formatTime()}.recording`;
-      const blob = new Blob([compressed], {type: "text/plain;charset=utf-16"});
-      saveAs(blob, filename);
+      return new Blob([compressed], {type: "text/plain;charset=utf-16"});
     }
   </script>
 </body>
