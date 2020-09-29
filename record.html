@@ -141,9 +141,14 @@
 
     let fetchTimer = null;
     function startRecording(interval, url) {
+      // Make sure the value is in the expected range.
+      const min = 15;
+      const max = 300;
+      const seconds = Math.min(max, Math.max(min, parseInt(interval)));
+      console.log("Start recording", url, "with interval:", seconds * 1000);
+
       fetchData(url);
-      const millis = Math.max(10000, parseInt(interval));
-      fetchTimer = setInterval(() => fetchData(url), millis);
+      fetchTimer = setInterval(() => fetchData(url), milliSecs);
     }
 
     function finishRecording(rawOutput) {
