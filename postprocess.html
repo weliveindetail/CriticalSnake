@@ -276,7 +276,18 @@
 
     function parseSnapshots(content, isCompressed) {
       const decompressed = isCompressed ? decompressDataset(content) : content;
-      return JSON.parse(decompressed);
+      const snapshots = JSON.parse(decompressed);
+
+      // This is a temporary fix, because one version of the record page
+      // incorrectly applied a JSON.stringify() where it wasn't necessary.
+      if (typeof(snapshots) == "string") {
+        console.warn("Parsed content is a string still and not a JSON.",
+                    "Apparently, content was double-stringified.",
+                    "Trying to parse again.", snapshots);
+        return JSON.parse(snapshots);
+      }
+
+      return snapshots;
     }
 
     function loadRawTracks(snapshots) {
