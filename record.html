@@ -152,11 +152,9 @@
       return JSON.stringify(json, null, 2);
     }
 
-    function downloadRecording(json) {
+    function downloadRecording(text) {
       const kilobyte = (str) => Math.round((str.length * 2) / 1024);
 
-      console.log(json);
-      const text = JSON.stringify(json);
       console.log("Raw size is:", kilobyte(text), "KB");
       const compressed = LZString.compressToUTF16(text);
       console.log("Compressed size is:", kilobyte(compressed), "KB");
