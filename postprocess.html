@@ -134,7 +134,8 @@
       $(reader).on('load', (event) => {
         try {
           playbackRecording = this.files[0].name;
-          const snapshots = decompressDataset(event.target.result);
+          const isCompressed = playbackRecording.endsWith(".recording");
+          const snapshots = parseSnapshots(event.target.result, isCompressed);
 
           loadRawTracks(snapshots);
           bikeMap.statsLabel.show();
@@ -265,12 +266,17 @@
       const kilobyte = (str) => Math.round((str.length * 2) / 1024);
 
       const decompressionBegin = Date.now();
-      const snapshots = LZString.decompressFromUTF16(compressedSnapshots);
+      const content = LZString.decompressFromUTF16(compressedSnapshots);
       console.log("Compressed size is:", kilobyte(compressedSnapshots), "KB");
-      console.log("Decompressed size is:", kilobyte(snapshots), "KB");
+      console.log("Decompressed size is:", kilobyte(content), "KB");
       console.log("Decompression took:", Date.now() - decompressionBegin, "ms");
 
-      return JSON.parse(snapshots);
+      return content;
+    }
+
+    function parseSnapshots(content, isCompressed) {
+      const decompressed = isCompressed ? decompressDataset(content) : content;
+      return JSON.parse(decompressed);
     }
 
     function loadRawTracks(snapshots) {
