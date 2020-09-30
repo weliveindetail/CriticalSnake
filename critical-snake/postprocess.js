@@ -1,4 +1,15 @@
-(function(CriticalSnake) {
+(function(CriticalSnake, _, L, LatLon) {
+
+function missingDependency(name) {
+  console.error("Cannot instantiate CriticalSnake. Please include", name,
+                "first.");
+}
+if (typeof(_) != "function")
+  return missingDependency("Lodash");
+if (typeof(L) != "object")
+  return missingDependency("Leaflet");
+if (typeof(LatLon) != "function")
+  return missingDependency("Geodesy spherical functions");
 
 // Make options accessible from the browser's debug console. The actual options
 // are populated when creating a CriticalSnake.PostProcessor().
@@ -739,4 +750,4 @@ CriticalSnake.PostProcessor = function() {
 
 }; // CriticalSnake.PostProcessor
 
-})(window.CriticalSnake = window.CriticalSnake || {});
+})(window.CriticalSnake = window.CriticalSnake || {}, _, L, LatLon);
