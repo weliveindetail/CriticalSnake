@@ -131,7 +131,7 @@ function createBikeMap(L, options) {
       const tracksOption = L.DomUtil.create('input', '', playbackGroup);
       tracksOption.id = "tracksOption";
       tracksOption.type = "checkbox";
-      tracksOption.checked = false; //!L.Browser.mobile;
+      tracksOption.checked = !L.Browser.mobile;
       tracksOption.style.marginLeft = "10px";
 
       const tracksOptionLabel = L.DomUtil.create('label', '', playbackGroup);
