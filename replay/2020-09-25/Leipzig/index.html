@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="description" content="Critical Mass Leipzig: Replay vom 25. September 2020" />
+  <meta name="keywords" content="Critical Mass CriticalMaps CriticalSnake Leipzig 2020 CM bike bicycle cycle Fahrrad community anniversary event ride velo fahrradfreundlich Treffpunkt" />
+
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="CriticalSnake"/>
+  <meta property="og:url" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-09-25/Leipzig/"/>
+  <meta property="og:image" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-09-25/Leipzig/img/preview_small.png"/>
+  <meta property="og:description" content="Critical Mass Leipzig: Replay vom 25. September 2020"/>
+  <meta property="og:updated_time" content="2020-09-29T00:00:00-02:00" />
+  <meta property="og:image:width" content="800" />
+  <meta property="og:image:height" content="561" />
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@CriticalSnake">
+  <meta name="twitter:title" content="CriticalSnake">
+  <meta name="twitter:url" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-09-25/Leipzig/"/>
+  <meta name="twitter:image" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-09-25/Leipzig/img/preview_small.png">
+  <meta name="twitter:description" content="Critical Mass Leipzig: Replay vom 25. September 2020">
+  <meta property="og:updated_time" content="2020-09-29T00:00:00-02:00" />
+  <meta property="og:image:width" content="800" />
+  <meta property="og:image:height" content="561" />
+
+  <title>Critical Mass Leipzig - 25. September 2020</title>
+  <style>
+    body {
+      font-size: 1rem;
+    }
+    #osm-map {
+      position: absolute;
+      left: 0px;
+      top: 0px;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="osm-map"></div>
+
+  <link rel="stylesheet" href="3rd-party/leaflet16/leaflet.css">
+  <script src="3rd-party/leaflet16/leaflet.js"></script>
+  <script src="3rd-party/leaflet-semicircle20/Semicircle.js"></script>
+  <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
+  <script src="3rd-party/geodesy11/latlon-spherical.min.js"></script>
+  <script src="3rd-party/lzstring14/lz-string.min.js"></script>
+
+  <script src="critical-snake/bikemap.js"></script>
+
+  <script>
+    const bikeMap = createBikeMap(L, {
+      center: [51.33, 12.37],
+      zoom: 14,
+    });
+
+    bikeMap.statsLabel.hide();
+    bikeMap.browseGroup.hide();
+    bikeMap.playbackGroup.hide();
+    bikeMap.downloadButton.hide();
+    bikeMap.loadingGroup.show();
+
+    let playbackFrameIdx = 0;
+    let playbackDataset = null;
+    bikeMap.playbackButton.click(() => {
+      if (playbackDataset) {
+        if (isRunning())
+          pause();
+        else
+          resume();
+      }
+    });
+
+    bikeMap.tracksOption.change(() => {
+      console.log("ok");
+    });
+
+    // Space key can toggle pause and resume.
+    $(document).on('keypress', e => {
+      if (playbackDataset && e.keyCode == 32) {
+        if (isRunning())
+          pause();
+        else
+          resume();
+      }
+    });
+
+    bikeMap.historySlider.attr({ min: 0, max: 500 });
+    $(document).on("input", bikeMap.historySlider, () => {
+      if (playbackDataset) {
+        playbackFrameIdx = parseInt(bikeMap.historySlider.val());
+        refreshView(playbackFrameIdx);
+      }
+    });
+
+    let playbackFPS = 25;
+    bikeMap.fpsInput.change(() => {
+      playbackFPS = parseInt(bikeMap.fpsInput.val());
+      console.log("FPS changed to", playbackFPS);
+    });
+
+    // Load the given resource asynchronously and return plain text content.
+    function loadCompressedRecording(fileUrl) {
+      console.log("About to load recording", fileUrl);
+
+      const reportWallTime = (begin, end, task) => {
+        console.log(task, "took:", Math.round((end - begin) / 10) * 10, "ms");
+      }
+
+      const loadRecordingBegin = Date.now();
+      const fetchData = new Promise((resolve, reject) => {
+        $.ajax({ url: fileUrl })
+          .fail(() => reject("Error querying " + fileUrl))
+          .done(content => {
+            reportWallTime(loadRecordingBegin, Date.now(), "Fetching data");
+            resolve([content, Date.now()])
+          });
+      });
+
+      const decompressData = fetchData.then(([compressed, begin]) => {
+        const kilobyte = (str) => Math.round((str.length * 2) / 1024);
+        console.log("Compressed size is:", kilobyte(compressed), "KB");
+
+        const content = LZString.decompressFromUTF16(compressed);
+        console.log("Decompressed size is:", kilobyte(content), "KB");
+
+        reportWallTime(begin, Date.now(), "Decompression");
+        return [content, Date.now()];
+      });
+
+      const prepareReplay = decompressData.then(([content, begin]) => {
+        playbackDataset = JSON.parse(content);
+
+        console.log("Data-points:", playbackDataset.dataPoints);
+        console.log("Circles:", playbackDataset.circles);
+        console.log("Segments:", playbackDataset.segments);
+
+        console.log("Data covers time range from/to:",
+                    "\n", new Date(playbackDataset.begin),
+                    "\n", new Date(playbackDataset.end));
+
+        playbackFrameIdx = 0;
+        refreshView(playbackFrameIdx);
+
+        bikeMap.loadingGroup.hide();
+        bikeMap.playbackGroup.show();
+        bikeMap.statsLabel.show();
+
+        reportWallTime(begin, Date.now(), "Instantiating replay");
+        reportWallTime(loadRecordingBegin, Date.now(), "Total replay loading");
+      });
+    }
+
+    const playbackRecording = "2020-09-25_fixed.replay";
+    loadCompressedRecording(playbackRecording);
+
+    // ----------------------------------------------------
+
+    function refreshView(frameIdx) {
+      const refreshViewBegin = Date.now();
+      bikeMap.historySlider.val(frameIdx);
+
+      const duration = playbackDataset.end - playbackDataset.begin;
+      const offset = duration * (frameIdx / 500);
+      const timestamp = playbackDataset.begin + offset;
+      const bikeCount = drawTracks(playbackDataset, timestamp);
+
+      // Adds a leading "0" for single digit values.
+      const pad2 = (val) => (val < 10 ? "0" : "") + val;
+      const d = new Date(timestamp);
+      bikeMap.statsLabel.text(
+        `📅 ${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+        `🕗 ${pad2(d.getHours())}:${pad2(d.getMinutes())} ` +
+        `📍🚲 ${bikeCount}`);
+
+      const diff = Date.now() - refreshViewBegin;
+      console.log("Rendering frame took:", Math.round(diff / 10) * 10, "ms");
+    }
+
+    // ----------------------------------------------------
+
+    let rotatingCollisionCircles = 0;
+    const drawFrameAction = () => {
+      rotatingCollisionCircles += playbackFPS;
+      switch (playbackFrameIdx) {
+        case 0:
+          refreshView(playbackFrameIdx);
+          playbackFrameIdx += 1;
+          break;
+        case 500:
+          refreshView(playbackFrameIdx);
+          bikeMap.playbackButton.val("▶");
+          playbackFrameIdx = 0;
+          break;
+        default:
+          refreshView(playbackFrameIdx);
+          playbackFrameIdx += 1;
+          break;
+      }
+    };
+
+    function resume() {
+      console.log("Rendering", playbackFPS, "FPS (", 1000 / playbackFPS, "ms per frame)");
+      bikeMap.playbackButton.val("||");
+
+      const nextFrameAction = () => {
+        drawFrameAction();
+        if (isRunning())
+          setTimeout(nextFrameAction, 1000 / playbackFPS);
+      };
+
+      setTimeout(nextFrameAction, 1000 / playbackFPS);
+    }
+
+    function pause() {
+      bikeMap.playbackButton.val("▶");
+    }
+
+    function isRunning() {
+      return bikeMap.playbackButton.val() != "▶";
+    }
+
+    // ----------------------------------------------------
+
+    let trackHeads = L.layerGroup([], { pane: "markerPane" });
+    let trackShadows = L.layerGroup([], { pane: "shadowPane" });
+
+    function drawTracks(dataset, stamp) {
+      bikeMap.removeLayer(trackHeads);
+      bikeMap.removeLayer(trackShadows);
+
+      trackShadows.clearLayers();
+      if (bikeMap.tracksOption[0].checked) {
+        drawShadows(trackShadows, dataset.dataPoints, dataset.segments, stamp);
+        trackShadows.addTo(bikeMap);
+      }
+
+      trackHeads.clearLayers();
+      const visibleBikes = drawCircles(trackHeads, dataset.dataPoints,
+                                       dataset.circles, stamp);
+      trackHeads.addTo(bikeMap);
+
+      return visibleBikes;
+    }
+
+    function colors(snakeIdx) {
+      if (snakeIdx == null)
+        return "#888";
+
+      const snakeColors = [
+        "#c90002", // red
+        "#ff0099", // pink
+        "#005214", // green
+        "#1b3d9f", // blue
+        "#888888", // grey
+        "#8b00ff", // violett
+      ];
+
+      if (snakeIdx >= 0 && snakeIdx < snakeColors.length)
+        return snakeColors[snakeIdx];
+
+      return "#000";
+    }
+
+    function drawShadows(canvas, dataPoints, segments, stamp) {
+      const startedAlready = (seg) => seg.first_stamp <= stamp;
+      const didNotStartYet = (idx) => !startedAlready(dataPoints[idx]);
+
+      const findEndIndex = (seg) => {
+        if (seg.last_stamp <= stamp)
+          return -1;
+        return seg.dataPointIdxs.findIndex(idx => didNotStartYet(idx));
+      };
+
+      for (const segment of segments.filter(startedAlready)) {
+        // Draw non-associated track segments?
+        //if (segment.snakeIdxs.length == 0)
+        //  continue;
+
+        // Draw segment entirely or only the first number of data-points.
+        const end = findEndIndex(segment);
+        const coordIdxs = end < 0 ? segment.dataPointIdxs
+                                  : segment.dataPointIdxs.slice(0, end);
+
+        for (const snakeIdx of segment.snakeIdxs) {
+          canvas.addLayer(
+              L.polyline(coordIdxs.map(idx => dataPoints[idx]), {
+                color: colors(snakeIdx),
+                opacity: 0.05
+              }));
+        }
+      }
+    }
+
+    function drawCircles(canvas, dataPoints, circles, stamp) {
+      const fullCircle = (c, idx) => L.circle(c, {
+        color: colors(idx),
+        fillOpacity: 0.75,
+        radius: 10 * Math.log2(c.dataPointIdxs.length),
+        stroke: false,
+      });
+
+      const semiCircle = (c, idx, from, to) => L.semiCircle(c, {
+        color: colors(idx),
+        fillOpacity: 0.75,
+        radius: 10 * Math.log2(c.dataPointIdxs.length),
+        startAngle: from,
+        stopAngle: to,
+        stroke: false,
+      });
+
+      const inTime = (c) => c.first_stamp <= stamp && c.last_stamp >= stamp;
+
+      const trackIdxs = new Set();
+      for (const circle of circles.filter(c => inTime(c))) {
+        circle.dataPointIdxs.forEach(idx => trackIdxs.add(dataPoints[idx].trackIdx));
+        switch (circle.snakeIdxs.length) {
+          case 0:
+            canvas.addLayer(fullCircle(circle, null));
+            break;
+          case 1:
+            canvas.addLayer(fullCircle(circle, circle.snakeIdxs[0]));
+            break;
+          default:
+            let angle = rotatingCollisionCircles;
+            const arcSize = 360 / circle.snakeIdxs.length;
+            for (const idx of circle.snakeIdxs) {
+              canvas.addLayer(semiCircle(circle, idx, angle, angle + arcSize));
+              angle += arcSize;
+            }
+            break;
+        }
+      }
+
+      return trackIdxs.size;
+    }
+  </script>
+</body>
+</html>
