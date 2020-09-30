@@ -31,9 +31,10 @@ CriticalSnake.PostProcessor = function() {
 
   function importApiVersion2DataPoint(dataPoint) {
     const floatCoord = (oldFormat) => {
-      let chars = oldFormat.toString().split('');
+      const sign = oldFormat < 0 ? -1 : 1;
+      const chars = Math.abs(oldFormat).toString().padStart(6, '0').split('');
       chars.splice(-6, 0, '.');
-      return parseFloat(chars.join(''));
+      return sign * parseFloat(chars.join(''));
     };
     return {
       first_stamp: dataPoint.timestamp * 1000,
