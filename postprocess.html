@@ -450,16 +450,18 @@
     let trackHeads = L.layerGroup([], { pane: "markerPane" });
     let trackShadows = L.layerGroup([], { pane: "shadowPane" });
 
-    function drawRawTracks(dataset, stamp) {
+    function drawRawTracks(dataset, stamp, range, opacity) {
+      range = range || 10;
+      opacity = opacity || 0.1;
+
       bikeMap.removeLayer(trackHeads);
       bikeMap.removeLayer(trackShadows);
-
       trackShadows.clearLayers();
 
       const minute = 60 * 1000;
       const withinLast10Minutes = (idx) => {
         if (dataset.dataPoints[idx].first_stamp <= stamp)
-          if (dataset.dataPoints[idx].last_stamp > stamp - 10 * minute)
+          if (dataset.dataPoints[idx].last_stamp > stamp - range * minute)
             return true;
         return false;
       };
@@ -473,7 +475,7 @@
           trackShadows.addLayer(
               L.polyline(coords, {
                 color: "#888",
-                opacity: 0.1
+                opacity: opacity
               }));
         }
       }
