@@ -192,6 +192,8 @@
       const filterBounds = CriticalSnake.FilterBounds[val];
       bikeMap.panTo(filterBounds.getCenter());
 
+      // Restore and populate options for the location and rebuild post-process
+      // controls.
       bikeMap.postprocessGroup.remove();
       restoreOptions(val);
       resetOptionsForPostprocessGroup(bikeMap.postprocessGroup.options);
