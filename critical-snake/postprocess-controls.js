@@ -27,12 +27,22 @@ L.Control.PostprocessGroup = L.Control.extend({
     this.addPostProcessButton(group);
     this.addStoreOptionsButton(group);
 
-    //L.DomEvent.on();
     return group;
   },
 
+  _events: {},
+
+  // We have to track all registered event handlers, so we can correctly remove
+  // them when the control group is removed from the map.
+  _DomEventOn: function(ctrl, name, handler) {
+    this._events[ctrl] = { name: name, handler: handler };
+    L.DomEvent.on(ctrl, name, handler);
+  },
+
   onRemove: function() {
-    //L.DomEvent.off();
+    for (const ctrl in this._events) {
+      L.DomEvent.off(ctrl, this._events[ctrl].name, this._events[ctrl].handler);
+    }
   },
 
   createGroupControl: function() {
@@ -40,6 +50,14 @@ L.Control.PostprocessGroup = L.Control.extend({
     group.style.display = "block";
     group.style.backgroundColor = "#fff";
     group.style.padding = "20px";
+
+    if (!L.Browser.touch) {
+      L.DomEvent.disableClickPropagation(group);
+      L.DomEvent.on(group, 'mousewheel', L.DomEvent.stopPropagation);
+    } else {
+      L.DomEvent.on(group, 'click', L.DomEvent.stopPropagation);
+    }
+
     return group;
   },
 
@@ -58,7 +76,7 @@ L.Control.PostprocessGroup = L.Control.extend({
       opt.value = filter;
     }
 
-    select.addEventListener("change", () => {
+    this._DomEventOn(select, "change", () => {
       this.locationFilterChanged(select.value);
     });
 
@@ -70,7 +88,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     button.type = "button";
     button.value = "Post-process";
     button.style.marginRight = "10px";
-    button.addEventListener("click", this.postprocessClicked);
+    this._DomEventOn(button, "click", this.postprocessClicked);
     return button;
   },
 
@@ -78,7 +96,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     const button = L.DomUtil.create("input", "", parent);
     button.type = "button";
     button.value = "Store options";
-    button.addEventListener("click", this.storeOptionsClicked);
+    this._DomEventOn(button, "click", this.storeOptionsClicked);
     return button;
   },
 
