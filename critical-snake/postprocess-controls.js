@@ -38,20 +38,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     return group;
   },
 
-  _events: {},
-
-  // We have to track all registered event handlers, so we can correctly remove
-  // them when the control group is removed from the map.
-  _DomEventOn: function(ctrl, name, handler) {
-    this._events[ctrl] = { name: name, handler: handler };
-    L.DomEvent.on(ctrl, name, handler);
-  },
-
-  onRemove: function() {
-    for (const ctrl in this._events) {
-      L.DomEvent.off(ctrl, this._events[ctrl].name, this._events[ctrl].handler);
-    }
-  },
+  onRemove: function() {},
 
   createGroupControl: function() {
     const group = L.DomUtil.create('div', 'leaflet-bar');
@@ -84,7 +71,7 @@ L.Control.PostprocessGroup = L.Control.extend({
       opt.value = filter;
     }
 
-    this._DomEventOn(select, "change", () => {
+    L.DomEvent.on(select, "change", () => {
       this.locationFilterChanged(select.value);
     });
 
@@ -101,7 +88,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     button.type = "button";
     button.value = "Post-process";
     button.style.marginRight = "10px";
-    this._DomEventOn(button, "click", this.postprocessClicked);
+    L.DomEvent.on(button, "click", this.postprocessClicked);
     return button;
   },
 
@@ -109,7 +96,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     const button = L.DomUtil.create("input", "", parent);
     button.type = "button";
     button.value = "Store options";
-    this._DomEventOn(button, "click", this.storeOptionsClicked);
+    L.DomEvent.on(button, "click", this.storeOptionsClicked);
     return button;
   },
 
