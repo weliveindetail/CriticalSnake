@@ -121,6 +121,7 @@
 
     let rawDataset = {};
     let playbackRecording = null;
+    let playbackRecordingHash = null;
     bikeMap.browseButton.change(function() {
       // Validate selection and set visual indication for the loading progress.
       bikeMap.browseGroup.hide();
@@ -145,8 +146,8 @@
           bikeMap.playbackGroup.show();
 
           restoreOptions();
+          resetOptionsForPostprocessGroup(bikeMap.postprocessGroup.options);
           bikeMap.postprocessGroup.addTo(bikeMap);
-          bikeMap.postprocessGroup.reset(CriticalSnake);
           bikeMap.postprocessGroup.show();
         }
         catch (ex) {
@@ -190,32 +191,75 @@
 
       const filterBounds = CriticalSnake.FilterBounds[val];
       bikeMap.panTo(filterBounds.getCenter());
+
+      bikeMap.postprocessGroup.remove();
+      restoreOptions(val);
+      resetOptionsForPostprocessGroup(bikeMap.postprocessGroup.options);
+      bikeMap.postprocessGroup.addTo(bikeMap);
+    };
+
+    bikeMap.postprocessGroup.snakeColorChanged = function(idx, color) {
+      CriticalSnake.PlaybackOptions.snakeColors[idx] = color;
     };
 
     bikeMap.postprocessGroup.storeOptionsClicked = function() {
       // Query existing options.
-      const key = "CriticalSnake.PostProcessOptions";
+      const key = "CriticalSnake";
       const val = localStorage.getItem(key);
-      const opts = val ? JSON.parse(val) : {};
+      const allOpts = val ? JSON.parse(val) : {};
 
-      // Add/overwrite options for the current recoring.
-      opts[playbackRecording] = CriticalSnake.PostProcessOptions;
-      localStorage.setItem(key, JSON.stringify(opts));
+      // Add/overwrite options in the two-level registry (the current
+      // recording's hash-code and the name of the location-filter).
+      const lev1 = playbackRecordingHash;
+      const lev2 = CriticalSnake.PostProcessOptions.analyzeTracks.filterName;
 
-      console.log("Stored options for file", playbackRecording,
-                  "in localStorage:", CriticalSnake.PostProcessOptions);
+      allOpts[lev1] = allOpts[lev1] || {};
+      allOpts[lev1][lev2] = {
+        postprocess: CriticalSnake.PostProcessOptions,
+        playback: CriticalSnake.PlaybackOptions,
+      };
+
+      localStorage.setItem(key, JSON.stringify(allOpts));
+      console.log("Stored options for", playbackRecording, `(${lev2}):`,
+                  allOpts[lev1][lev2]);
     };
 
-    function restoreOptions() {
-      const key = "CriticalSnake.PostProcessOptions";
+    function restoreOptions(location) {
+      const key = "CriticalSnake";
       const val = localStorage.getItem(key);
-      const opts = val ? JSON.parse(val) : {};
+      const allOpts = val ? JSON.parse(val) : {};
 
-      if (opts.hasOwnProperty(playbackRecording)) {
-        console.log("Restoring options for file", playbackRecording);
-        CriticalSnake.mergePostProcessOptions(opts[playbackRecording]);
+      const lev1 = playbackRecordingHash.toString();
+      const lev2 = location || CriticalSnake.PostProcessOptions.analyzeTracks.filterName;
+
+      if (allOpts.hasOwnProperty(lev1) && allOpts[lev1].hasOwnProperty(lev2)) {
+        CriticalSnake.mergePostProcessOptions(allOpts[lev1][lev2].postprocess);
+        CriticalSnake.mergePlaybackOptions(allOpts[lev1][lev2].playback);
+        console.log("Restored options for", playbackRecording, `(${lev2}):`,
+                    allOpts[lev1][lev2]);
       } else {
-        console.log("No options stored for file", playbackRecording);
+        console.log("No options stored for", playbackRecording, `(${lev2})`);
+      }
+    }
+
+    function resetOptionsForPostprocessGroup(opts) {
+      const postprocess = CriticalSnake.PostProcessOptions;
+      const playback = CriticalSnake.PlaybackOptions;
+
+      if (postprocess.analyzeTracks && postprocess.analyzeTracks.filterName) {
+        opts.locationFilter = postprocess.analyzeTracks.filterName;
+      }
+
+      if (postprocess.analyzeTracks && postprocess.associateSnakes) {
+        opts.timeRange = {
+          startStamp: postprocess.analyzeTracks.startStamp,
+          originsStamp: postprocess.associateSnakes.startTime,
+          endStamp: postprocess.analyzeTracks.endStamp,
+        };
+      }
+
+      if (playback.snakeColors) {
+        opts.snakeColors = playback.snakeColors;
       }
     }
 
@@ -277,8 +321,15 @@
       return content;
     }
 
+    function hashCode(content) {
+      const it = (hash, val) => (((hash << 5) - hash) + val.charCodeAt(0)) | 0;
+      return content.split('').reduce(it, 0);
+    }
+
     function parseSnapshots(content, isCompressed) {
       const decompressed = isCompressed ? decompressDataset(content) : content;
+      playbackRecordingHash = hashCode(decompressed);
+
       const snapshots = JSON.parse(decompressed);
 
       // This is a temporary fix, because one version of the record page
