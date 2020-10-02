@@ -794,7 +794,6 @@
               }
 
               addEvent(dom, 'click', function (e) {
-                  e.stopPropagation();
                   return e.preventDefault();
               });
 

@@ -100,19 +100,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     return button;
   },
 
-  pickColor: function(colorBox, onSuccess) {
-    const dialog = new Picker({
-      parent: colorBox,
-      popup: "left",
-      color: colorBox.style.backgroundColor,
-    });
-    dialog.onDone = onSuccess;
-    dialog.openHandler();
-  },
-
-  createColorPickerBox: function(color, customHandler) {
-    customHandler = customHandler || false;
-
+  createColorPickerBox: function(color) {
     const box = document.createElement("div");
     box.style.display = "inline-block";
     box.style.width = "20px";
@@ -127,14 +115,6 @@ L.Control.PostprocessGroup = L.Control.extend({
     // Workaround inconform positioning if plusButton was the only one with text.
     box.innerHTML = "&nbsp;";
 
-    if (!customHandler) {
-      this._DomEventOn(box, "click", () => {
-        this.pickColor(box, (col) => {
-          box.style.backgroundColor = col.hex;
-        });
-      });
-    }
-
     return box;
   },
 
@@ -148,24 +128,45 @@ L.Control.PostprocessGroup = L.Control.extend({
     container.style.marginBottom = "8px";
     container.style.maxWidth = "200px";
 
-    const plusButton = this.createColorPickerBox("#fff", true);
+    // The plus button is a special box at the end of the list, that adds new
+    // color boxes on click.
+    const plusButton = this.createColorPickerBox("#fff");
     plusButton.innerHTML = "+";
     plusButton.style.textAlign = "center";
     plusButton.style.border = "1px solid #666";
     plusButton.style.boxShadow = "inset 0 0 1px #FFF, inset 0 1px 7px #EBEBEB, 0 3px 6px -3px #BBB";
     container.appendChild(plusButton);
 
+    // Use a shared color picker dialog for all boxes.
+    const colorPickerDialog = new Picker({ popup: "left" });
+
+    // New color boxes are always inserted in front of the plus button.
     const appendNewBox = (color) => {
       const box = this.createColorPickerBox(color);
       container.insertBefore(box, plusButton);
       boxes.push(box);
     };
 
-    L.DomEvent.on(plusButton, "click", () => {
-      this.pickColor(plusButton, color => appendNewBox(color.hex));
-    });
-
+    // Add initial color boxes.
     this.options.snakeColors.forEach(appendNewBox);
+
+    // Open the color picker dialog when clicking a child element of the
+    // container. It can either be a color box or the plus button.
+    L.DomEvent.on(container, "click", (e) => {
+      if (e.path[1] == container) {
+        const box = e.path[0];
+        colorPickerDialog.movePopup({
+          parent: box,
+          color: box.style.backgroundColor,
+          onDone: color => {
+            if (box == plusButton)
+              appendNewBox(color.hex);
+            else
+              box.style.backgroundColor = color.hex;
+          },
+        }, true);
+      }
+    });
 
     return boxes;
   },
