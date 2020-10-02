@@ -85,8 +85,10 @@ CriticalSnake.PostProcessor = function() {
     for (const snapshot in dataset) {
       for (const participant in dataset[snapshot]) {
         const dataPoint = importApiVersion2DataPoint(dataset[snapshot][participant]);
-        const dataPointIdx = pool.push(dataPoint) - 1;
+        if (dataPoint.lat == 0 && dataPoint.lng == 0)
+          continue;
 
+        const dataPointIdx = pool.push(dataPoint) - 1;
         const trackIdx = hashToTrackIdx(participant);
         if (trackIdx >= tracks.length) {
           tracks.push([ dataPointIdx ]);
