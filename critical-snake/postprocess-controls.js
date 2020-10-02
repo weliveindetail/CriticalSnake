@@ -4,6 +4,8 @@ L.Control.PostprocessGroup = L.Control.extend({
   options: {
     filterNames: [],
     snakeColors: [],
+    locationFilter: "",
+    timeRange: { startStamp: 0, originsStamp: 0, endStamp: 8640000000000000 },
   },
 
   initialize: function(options) {
@@ -85,6 +87,11 @@ L.Control.PostprocessGroup = L.Control.extend({
     this._DomEventOn(select, "change", () => {
       this.locationFilterChanged(select.value);
     });
+
+    // Take over initial value from options.
+    if (this.options.locationFilter) {
+      select.value = this.options.locationFilter;
+    }
 
     return select;
   },
@@ -224,34 +231,30 @@ L.Control.PostprocessGroup = L.Control.extend({
       notifyTimeRangeChanged(values);
     });
 
-    return slider;
-  },
-
-  reset: function(criticalSnake) {
-    const trackOpts = criticalSnake.PostProcessOptions.analyzeTracks;
-    const snakeOpts = criticalSnake.PostProcessOptions.associateSnakes;
-
-    if (trackOpts) {
-      if (criticalSnake.FilterBounds.hasOwnProperty(trackOpts.filterName)) {
-        this.locationFilter.value = trackOpts.filterName;
-      }
-    }
-
-    if (trackOpts && snakeOpts) {
-      const stamps = [
-        trackOpts.startStamp,
-        snakeOpts.startTime,
-        trackOpts.endStamp,
-      ];
+    if (this.options.timeRange.endStamp != 0) {
+      // Take over initial value from options.
+      const opts = this.options.timeRange;
+      const stamps = [ opts.startStamp, opts.originsStamp, opts.endStamp ];
       const percents = stamps.map(this.timestampToPercent);
-      this.timeRangeSlider.noUiSlider.set(percents);
+      slider.noUiSlider.set(percents);
 
       this.timeRangeChanged({
-        start: trackOpts.startStamp,
-        origins: snakeOpts.startTime,
-        end: trackOpts.endStamp,
+        start: opts.startStamp,
+        origins: opts.originsStamp,
+        end: opts.endStamp,
       });
+    } else {
+      // Otherwise, store defaults as initial values in options.
+      const percents = [0, 10, 100];
+      const stamps = percents.map(this.percentToTimestamp);
+      this.options.timeRange = {
+        startStamp: stamps[0],
+        originsStamp: stamps[1],
+        endStamp: stamps[2],
+      };
     }
+
+    return slider;
   },
 
   // Mandatory overrides
@@ -288,8 +291,3 @@ L.Control.PostprocessGroup = L.Control.extend({
   },
 
 });
-
-L.control.addPostprocessGroup = function(map, opts) {
-  const group = new L.Control.PostprocessGroup(map, opts);
-  group.addTo(map);
-}
