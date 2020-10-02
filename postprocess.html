@@ -596,6 +596,26 @@
 
       return trackIdxs.size;
     }
+
+    function drawFilterBounds(color, weight, opacity) {
+      bikeMap.removeLayer(trackHeads);
+      bikeMap.removeLayer(trackShadows);
+      trackShadows.clearLayers();
+
+      const opts = {
+        color: color || "#f88",
+        weight: weight || 1,
+        opacity: opacity || 0.5,
+      };
+
+      for (const region in CriticalSnake.FilterBounds) {
+        const bounds = CriticalSnake.FilterBounds[region];
+        console.log("Filter bounds for", region, ":", bounds);
+        trackShadows.addLayer(L.rectangle(bounds, opts));
+      }
+
+      trackShadows.addTo(bikeMap);
+    }
   </script>
 </body>
 </html>
