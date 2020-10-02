@@ -3,10 +3,15 @@ L.Control.PostprocessGroup = L.Control.extend({
 
   options: {
     filterNames: [],
+    snakeColors: [],
   },
 
-  initialize: function(bikeMap, options) {
-    this.bikeMap = bikeMap;
+  initialize: function(options) {
+    if (!typeof(Picker) == "function") {
+      console.error("Cannot instantiate postprocess controls.",
+                    "Please include vanilla-picker first.");
+      return;
+    }
     L.setOptions(this, options);
   },
 
@@ -24,6 +29,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     this.groupControl = group;
     this.locationFilter = this.addLocationFilterControls(group);
     this.timeRangeSlider = this.addTimeRangeControls(group);
+    this.snakeColorPickers = this.addSnakeColorPickers(group);
     this.addPostProcessButton(group);
     this.addStoreOptionsButton(group);
 
@@ -49,7 +55,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     const group = L.DomUtil.create('div', 'leaflet-bar');
     group.style.display = "block";
     group.style.backgroundColor = "#fff";
-    group.style.padding = "20px";
+    group.style.padding = "10px";
 
     if (!L.Browser.touch) {
       L.DomEvent.disableClickPropagation(group);
@@ -100,6 +106,76 @@ L.Control.PostprocessGroup = L.Control.extend({
     return button;
   },
 
+  pickColor: function(colorBox, onSuccess) {
+    const dialog = new Picker({
+      parent: colorBox,
+      popup: "left",
+      color: colorBox.style.backgroundColor,
+    });
+    dialog.onDone = onSuccess;
+    dialog.openHandler();
+  },
+
+  createColorPickerBox: function(color, customHandler) {
+    customHandler = customHandler || false;
+
+    const box = document.createElement("div");
+    box.style.display = "inline-block";
+    box.style.width = "20px";
+    box.style.height = "20px";
+    box.style.boxShadow = "1px 1px 2px #aaa";
+    box.style.borderRadius = "2px";
+    box.style.marginRight = "4px";
+    box.style.marginBottom = "4px";
+    box.style.backgroundColor = color;
+    box.style.cursor = "pointer";
+
+    // Workaround inconform positioning if plusButton was the only one with text.
+    box.innerHTML = "&nbsp;";
+
+    if (!customHandler) {
+      this._DomEventOn(box, "click", () => {
+        this.pickColor(box, (col) => {
+          box.style.backgroundColor = col.hex;
+        });
+      });
+    }
+
+    return box;
+  },
+
+  addSnakeColorPickers: function(parent) {
+    const boxes = [];
+
+    const label = L.DomUtil.create('label', '', parent);
+    label.innerHTML = "Select snake colors:";
+
+    const container = L.DomUtil.create('div', '', parent);
+    container.style.marginBottom = "8px";
+    container.style.maxWidth = "200px";
+
+    const plusButton = this.createColorPickerBox("#fff", true);
+    plusButton.innerHTML = "+";
+    plusButton.style.textAlign = "center";
+    plusButton.style.border = "1px solid #666";
+    plusButton.style.boxShadow = "inset 0 0 1px #FFF, inset 0 1px 7px #EBEBEB, 0 3px 6px -3px #BBB";
+    container.appendChild(plusButton);
+
+    const appendNewBox = (color) => {
+      const box = this.createColorPickerBox(color);
+      container.insertBefore(box, plusButton);
+      boxes.push(box);
+    };
+
+    L.DomEvent.on(plusButton, "click", () => {
+      this.pickColor(plusButton, color => appendNewBox(color.hex));
+    });
+
+    this.options.snakeColors.forEach(appendNewBox);
+
+    return boxes;
+  },
+
   addTimeRangeControls: function(parent) {
     const label = L.DomUtil.create('label', '', parent);
     label.innerHTML = "Select time-range:";
@@ -107,7 +183,7 @@ L.Control.PostprocessGroup = L.Control.extend({
 
     const slider = L.DomUtil.create("div", "", parent);
     slider.style.width = "200px";
-    slider.style.margin = "5px 9px 20px 9px";
+    slider.style.margin = "5px 9px 15px 9px";
 
     const fmt = (prefix) => ({
       to: val => {
@@ -196,6 +272,11 @@ L.Control.PostprocessGroup = L.Control.extend({
 
   locationFilterChanged: (filterName) => {
     console.log("LocationFilter in PostprocessGroup changed:", filterName);
+  },
+
+  snakeColorChanged: (idx, color) => {
+    console.log("In PostprocessGroup color of snake-index", idx, "changed to:",
+                color);
   },
 
   postprocessClicked: () => {
