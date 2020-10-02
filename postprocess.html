@@ -55,7 +55,7 @@
 <body>
   <div id="osm-map"></div>
 
-  <script src="3rd-party/leaflet16/leaflet-src.js"></script>
+  <script src="3rd-party/leaflet16/leaflet.js"></script>
   <script src="3rd-party/leaflet-semicircle20/Semicircle.js"></script>
   <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
   <script src="3rd-party/geodesy11/latlon-spherical.min.js"></script>
@@ -63,10 +63,12 @@
   <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
   <script src="3rd-party/nouislider14/nouislider.min.js"></script>
   <script src="3rd-party/lodash417/lodash.min.js"></script>
+  <script src="3rd-party/vanilla-picker/vanilla-picker.min.js"></script>
 
   <script src="critical-snake/postprocess.js"></script>
   <script src="critical-snake/bikemap.js"></script>
   <script src="critical-snake/postprocess-controls.js"></script>
+  <script src="critical-snake/playback.js"></script>
 
   <script>
     function parseUrlParams(url) {
@@ -86,9 +88,10 @@
     bikeMap.playbackGroup.hide();
     bikeMap.statsLabel.hide();
 
-    bikeMap.postprocessGroup = new L.Control.PostprocessGroup(bikeMap, {
+    bikeMap.postprocessGroup = new L.Control.PostprocessGroup({
       position: 'topright',
       filterNames: Object.keys(CriticalSnake.FilterBounds),
+      snakeColors: CriticalSnake.PlaybackOptions.snakeColors,
     });
 
     let playbackFrameIdx = 0;
@@ -507,21 +510,12 @@
     }
 
     function colors(snakeIdx) {
-      if (snakeIdx == null)
-        return "#888";
+      const colors = CriticalSnake.PlaybackOptions.snakeColors;
 
-      const snakeColors = [
-        "#c90002", // red
-        "#1b3d9f", // blue
-        "#ff0099", // pink
-        "#005214", // green
-        "#8b00ff", // violett
-      ];
+      if (snakeIdx >= 0 && snakeIdx < colors.length)
+        return colors[snakeIdx];
 
-      if (snakeIdx >= 0 && snakeIdx < snakeColors.length)
-        return snakeColors[snakeIdx];
-
-      return "#000";
+      return CriticalSnake.PlaybackOptions.defaultColor;
     }
 
     function drawShadows(canvas, dataPoints, segments, stamp) {
