@@ -25,6 +25,7 @@ CriticalSnake.mergePostProcessOptions = function(incoming) {
 CriticalSnake.FilterBounds = {
   Berlin: L.latLngBounds([52.40, 13.23], [52.61, 13.56]),
   Barcelona: L.latLngBounds([41.26, 2.00], [41.45, 2.29]),
+  Leipzig: L.latLngBounds([51.29, 12.29], [51.37, 12.45]),
 };
 
 CriticalSnake.PostProcessor = function() {
