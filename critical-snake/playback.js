@@ -1,11 +1,9 @@
-(function(CriticalSnake, _, L) {
+(function(CriticalSnake, L) {
 
 function missingDependency(name) {
   console.error("Cannot instantiate CriticalSnake. Please include", name,
                 "first.");
 }
-if (typeof(_) != "function")
-  return missingDependency("Lodash");
 if (typeof(L) != "object")
   return missingDependency("Leaflet");
 
@@ -28,12 +26,30 @@ CriticalSnake.PlaybackOptions = {
   center: null,
 };
 
+function isObject(item) {
+  return item && typeof(item) === 'object' && !Array.isArray(item);
+}
+
+function mergeDeep(target, source) {
+  if (isObject(target) && isObject(source)) {
+    for (const key in source) {
+      if (isObject(source[key])) {
+        if (!target[key])
+          Object.assign(target, { [key]: {} });
+        mergeDeep(target[key], source[key]);
+      } else {
+        Object.assign(target, { [key]: source[key] });
+      }
+    }
+  }
+  return target;
+}
+
 // Use this function to partially override PlaybackOptions.
 CriticalSnake.mergePlaybackOptions = function(incoming) {
-  // In lodash's merge implementation, the latest occurrence of a duplicate key
-  // takes precedence.
+  // The latest occurrence of a duplicate key takes precedence.
   CriticalSnake.PlaybackOptions =
-      _.merge(CriticalSnake.PlaybackOptions, incoming);
+      mergeDeep(CriticalSnake.PlaybackOptions, incoming);
 };
 
 // TODO
@@ -41,4 +57,4 @@ CriticalSnake.Playback = function() {
   return this;
 }; // CriticalSnake.Playback
 
-})(window.CriticalSnake = window.CriticalSnake || {}, _, L);
+})(window.CriticalSnake = window.CriticalSnake || {}, L);
