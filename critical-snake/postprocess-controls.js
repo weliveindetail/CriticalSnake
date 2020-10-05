@@ -131,7 +131,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     container.appendChild(plusButton);
 
     // Use a shared color picker dialog for all boxes.
-    const colorPickerDialog = new Picker({ popup: "left" });
+    const colorPickerDialog = new Picker({ popup: "left", alpha: false });
 
     // New color boxes are always inserted in front of the plus button.
     let snakeColorIndex = 0;
@@ -139,6 +139,17 @@ L.Control.PostprocessGroup = L.Control.extend({
       const box = this.createColorPickerBox(color);
       container.insertBefore(box, plusButton);
       box.dataset.index = snakeColorIndex++;
+    };
+
+    // Change notifications are sent from all color boxes that have the index
+    // field (all except the plusButton).
+    const notifySnakeColorChanged = (box, color) => {
+      if (box.dataset.index) {
+        box.style.backgroundColor = color.hex;
+        this.snakeColorChanged(box.dataset.index, color);
+        return true;
+      }
+      return false;
     };
 
     // Add initial color boxes.
@@ -153,12 +164,13 @@ L.Control.PostprocessGroup = L.Control.extend({
           parent: box,
           color: box.style.backgroundColor,
           onDone: color => {
-            if (box == plusButton) {
-              appendNewBox(color.hex);
-            } else {
-              box.style.backgroundColor = color.hex;
-              this.snakeColorChanged(box.dataset.index, color.hex);
-            }
+            if (notifySnakeColorChanged(box, color.hex))
+              return;
+            console.assert(box == plusButton);
+            appendNewBox(color.hex);
+          },
+          onChange: color => {
+            notifySnakeColorChanged(box, color.hex);
           },
         }, true);
       }
