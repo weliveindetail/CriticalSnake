@@ -26,16 +26,15 @@ L.Control.PostprocessGroup = L.Control.extend({
   },
 
   onAdd: function() {
-    const group = this.createGroupControl();
+    this.groupControl = this.createGroupControl();
 
-    this.groupControl = group;
-    this.locationFilter = this.addLocationFilterControls(group);
-    this.timeRangeSlider = this.addTimeRangeControls(group);
-    this.snakeColorPickers = this.addSnakeColorPickers(group);
-    this.addPostProcessButton(group);
-    this.addStoreOptionsButton(group);
+    this.addLocationFilterControls(this.groupControl);
+    this.addTimeRangeControls(this.groupControl);
+    this.addSnakeColorPickers(this.groupControl);
+    this.addPostProcessButton(this.groupControl);
+    this.addStoreOptionsButton(this.groupControl);
 
-    return group;
+    return this.groupControl;
   },
 
   onRemove: function() {},
@@ -79,8 +78,6 @@ L.Control.PostprocessGroup = L.Control.extend({
     if (this.options.locationFilter) {
       select.value = this.options.locationFilter;
     }
-
-    return select;
   },
 
   addPostProcessButton: function(parent) {
@@ -89,7 +86,6 @@ L.Control.PostprocessGroup = L.Control.extend({
     button.value = "Post-process";
     button.style.marginRight = "10px";
     L.DomEvent.on(button, "click", this.postprocessClicked);
-    return button;
   },
 
   addStoreOptionsButton: function(parent) {
@@ -97,7 +93,6 @@ L.Control.PostprocessGroup = L.Control.extend({
     button.type = "button";
     button.value = "Store options";
     L.DomEvent.on(button, "click", this.storeOptionsClicked);
-    return button;
   },
 
   createColorPickerBox: function(color) {
@@ -119,8 +114,6 @@ L.Control.PostprocessGroup = L.Control.extend({
   },
 
   addSnakeColorPickers: function(parent) {
-    const boxes = [];
-
     const label = L.DomUtil.create('label', '', parent);
     label.innerHTML = "Select snake colors:";
 
@@ -144,9 +137,8 @@ L.Control.PostprocessGroup = L.Control.extend({
     let snakeColorIndex = 0;
     const appendNewBox = (color) => {
       const box = this.createColorPickerBox(color);
-      box.dataset.index = snakeColorIndex++;
       container.insertBefore(box, plusButton);
-      boxes.push(box);
+      box.dataset.index = snakeColorIndex++;
     };
 
     // Add initial color boxes.
@@ -171,8 +163,6 @@ L.Control.PostprocessGroup = L.Control.extend({
         }, true);
       }
     });
-
-    return boxes;
   },
 
   addTimeRangeControls: function(parent) {
@@ -245,8 +235,6 @@ L.Control.PostprocessGroup = L.Control.extend({
         endStamp: stamps[2],
       };
     }
-
-    return slider;
   },
 
   // Mandatory overrides
