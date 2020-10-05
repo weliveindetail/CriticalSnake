@@ -141,8 +141,10 @@ L.Control.PostprocessGroup = L.Control.extend({
     const colorPickerDialog = new Picker({ popup: "left" });
 
     // New color boxes are always inserted in front of the plus button.
+    let snakeColorIndex = 0;
     const appendNewBox = (color) => {
       const box = this.createColorPickerBox(color);
+      box.dataset.index = snakeColorIndex++;
       container.insertBefore(box, plusButton);
       boxes.push(box);
     };
@@ -159,10 +161,12 @@ L.Control.PostprocessGroup = L.Control.extend({
           parent: box,
           color: box.style.backgroundColor,
           onDone: color => {
-            if (box == plusButton)
+            if (box == plusButton) {
               appendNewBox(color.hex);
-            else
+            } else {
               box.style.backgroundColor = color.hex;
+              this.snakeColorChanged(box.dataset.index, color.hex);
+            }
           },
         }, true);
       }
