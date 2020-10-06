@@ -25,13 +25,19 @@ L.Control.PostprocessGroup = L.Control.extend({
     this.groupControl.style.display = "none";
   },
 
+  enablePostprocessing: function(allowed) {
+    console.assert(this.postprocessButton);
+    this.postprocessButton.disabled = !allowed;
+  },
+
   onAdd: function() {
     this.groupControl = this.createGroupControl();
 
     this.addLocationFilterControls(this.groupControl);
     this.addTimeRangeControls(this.groupControl);
     this.addSnakeColorPickers(this.groupControl);
-    this.addPostProcessButton(this.groupControl);
+
+    this.postprocessButton = this.addPostProcessButton(this.groupControl);
     this.addStoreOptionsButton(this.groupControl);
 
     return this.groupControl;
@@ -86,6 +92,7 @@ L.Control.PostprocessGroup = L.Control.extend({
     button.value = "Post-process";
     button.style.marginRight = "10px";
     L.DomEvent.on(button, "click", this.postprocessClicked);
+    return button;
   },
 
   addStoreOptionsButton: function(parent) {

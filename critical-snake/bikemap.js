@@ -82,61 +82,9 @@ function createBikeMap(L, options) {
     },
   });
 
-  L.Control.PlaybackGroup = L.Control.extend({
-    onAdd: function() {
-      const playbackGroup = L.DomUtil.create('div', 'leaflet-bar');
-      playbackGroup.id = "playbackGroup";
-      playbackGroup.style.display = "flex";
-      playbackGroup.style.alignItems = "center";
-      playbackGroup.style.backgroundColor = "#fff";
-      playbackGroup.style.padding = "5px";
-
-      const downloadButton = L.DomUtil.create('input', '', playbackGroup);
-      downloadButton.id = "downloadButton";
-      downloadButton.type = "button";
-      downloadButton.value = "💾";
-      downloadButton.style.border = "0";
-      downloadButton.style.marginRight = "0.4em";
-
-      const playbackButton = L.DomUtil.create('input', '', playbackGroup);
-      playbackButton.id = "playbackButton";
-      playbackButton.type = "button";
-      playbackButton.value = "▶";
-      playbackButton.style.border = "0";
-
-      const historySlider = L.DomUtil.create('input', '', playbackGroup);
-      historySlider.id = "historySlider";
-      historySlider.type = "range";
-
-      const fpsInput = L.DomUtil.create('input', '', playbackGroup);
-      fpsInput.type = "number";
-      fpsInput.id = "fpsInput";
-      fpsInput.min = "1";
-      fpsInput.max = "100";
-      fpsInput.value = "15";
-      fpsInput.style.width = "3rem";
-      fpsInput.style.textAlign = "right";
-      fpsInput.style.marginLeft = "0.5rem";
-
-      const fpsLabel = L.DomUtil.create('label', '', playbackGroup);
-      fpsLabel.innerHTML = "FPS";
-      fpsLabel.id = "fpsLabel";
-      fpsLabel.htmlFor = "fpsInput";
-      fpsLabel.style.padding = "0 3px";
-
-      L.DomEvent.on(fpsInput, 'keydown', (e) => {
-        e.preventDefault();
-      });
-
-      controlGroups.push(playbackGroup);
-      return playbackGroup;
-    },
-  });
-
   (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
   (new L.Control.BrowseGroup({ position: 'bottomleft' })).addTo(bikeMap);
   (new L.Control.LoadingGroup({ position: 'bottomleft' })).addTo(bikeMap);
-  (new L.Control.PlaybackGroup({ position: 'bottomleft' })).addTo(bikeMap);
   (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
 
   bikeMap.statsLabel = $("#statsLabel");
@@ -147,13 +95,6 @@ function createBikeMap(L, options) {
   bikeMap.loadingGroup = $("#loadingGroup");
   bikeMap.loadingSpinner = $("#loadingSpinner");
   bikeMap.loadingLabel = $("#loadingLabel");
-
-  bikeMap.playbackGroup = $("#playbackGroup");
-  bikeMap.downloadButton = $("#downloadButton");
-  bikeMap.playbackButton = $("#playbackButton");
-  bikeMap.historySlider = $("#historySlider");
-  bikeMap.fpsInput = $("#fpsInput");
-  bikeMap.fpsLabel = $("#fpsLabel");
 
   const mouseEvents = "mouseup mousedown mousemove mousewheel";
   const touchEvents = "touchstart touchend touchmove";

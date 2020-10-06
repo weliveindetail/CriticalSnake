@@ -7,7 +7,14 @@ function missingDependency(name) {
 if (typeof(L) != "object")
   return missingDependency("Leaflet");
 
-// Make options accessible from the browser's debug console.
+// Make the playback status accessible to the browser's debug console.
+CriticalSnake.PlaybackStatus = {
+  running: false,
+  frameTime: 0,
+  duration: 1,
+};
+
+// Make options accessible to the browser's debug console.
 CriticalSnake.PlaybackOptions = {
   defaultEnable: {
     drawCircles: true,

@@ -69,6 +69,7 @@
   <script src="critical-snake/bikemap.js"></script>
   <script src="critical-snake/postprocess-controls.js"></script>
   <script src="critical-snake/playback.js"></script>
+  <script src="critical-snake/playback-controls.js"></script>
 
   <script>
     function parseUrlParams(url) {
@@ -85,8 +86,13 @@
     const bikeMap = createBikeMap(L);
     bikeMap.browseGroup.show();
     bikeMap.loadingGroup.hide();
-    bikeMap.playbackGroup.hide();
     bikeMap.statsLabel.hide();
+
+    bikeMap.playbackGroup = new L.Control.PlaybackGroup({
+      position: 'bottomleft',
+      fps: CriticalSnake.PlaybackOptions.fps,
+      status: CriticalSnake.PlaybackStatus,
+    });
 
     bikeMap.postprocessGroup = new L.Control.PostprocessGroup({
       position: 'topright',
@@ -94,31 +100,7 @@
       snakeColors: CriticalSnake.PlaybackOptions.snakeColors,
     });
 
-    let playbackFrameIdx = 0;
     let playbackDataset = null;
-    bikeMap.playbackButton.click(() => {
-      if (playbackDataset) {
-        if (isRunning())
-          pause();
-        else
-          resume();
-      }
-    });
-
-    bikeMap.historySlider.attr({ min: 0, max: 500 });
-    $(document).on("input", bikeMap.historySlider, () => {
-      if (playbackDataset) {
-        playbackFrameIdx = parseInt(bikeMap.historySlider.val());
-        refreshView(playbackFrameIdx);
-      }
-    });
-
-    let playbackFPS = 15;
-    bikeMap.fpsInput.change(() => {
-      playbackFPS = parseInt(bikeMap.fpsInput.val());
-      console.log("FPS changed to", playbackFPS);
-    });
-
     let rawDataset = {};
     let playbackRecording = null;
     let playbackRecordingHash = null;
@@ -126,6 +108,7 @@
       // Validate selection and set visual indication for the loading progress.
       bikeMap.browseGroup.hide();
       bikeMap.loadingGroup.show();
+      bikeMap.playbackGroup.remove();
       bikeMap.postprocessGroup.remove();
 
       if (this.files.length == 0)
@@ -143,12 +126,15 @@
 
           loadRawTracks(snapshots);
           bikeMap.statsLabel.show();
-          bikeMap.playbackGroup.show();
 
           restoreOptions();
           resetOptionsForPostprocessGroup(bikeMap.postprocessGroup.options);
           bikeMap.postprocessGroup.addTo(bikeMap);
           bikeMap.postprocessGroup.show();
+
+          bikeMap.playbackGroup.addTo(bikeMap);
+          bikeMap.playbackGroup.setTimeRange(playbackDataset.begin, playbackDataset.end);
+          bikeMap.playbackGroup.show();
         }
         catch (ex) {
           bikeMap.browseGroup.show();
@@ -202,7 +188,7 @@
 
     bikeMap.postprocessGroup.snakeColorChanged = function(idx, color) {
       CriticalSnake.PlaybackOptions.snakeColors[idx] = color;
-      refreshView(playbackFrameIdx);
+      refreshView();
     };
 
     bikeMap.postprocessGroup.storeOptionsClicked = function() {
@@ -268,16 +254,18 @@
 
     bikeMap.postprocessGroup.postprocessClicked = function() {
       bikeMap.postprocessGroup.hide();
-      bikeMap.playbackGroup.hide();
       bikeMap.statsLabel.hide();
       bikeMap.loadingGroup.show();
+      bikeMap.playbackGroup.remove();
 
       // Give the UI a chance to refresh and show the loading state.
       setTimeout(() => {
         try {
           postprocessRecording();
+
+          bikeMap.playbackGroup.setTimeRange(playbackDataset.begin, playbackDataset.end);
+          bikeMap.playbackGroup.addTo(bikeMap);
           bikeMap.statsLabel.show();
-          bikeMap.playbackGroup.show();
         }
         catch (ex) {
           console.error("Postprocessing failed:", ex);
@@ -287,28 +275,28 @@
       }, 10);
     };
 
-    bikeMap.downloadButton.click(function() {
-      bikeMap.playbackGroup.hide();
-      bikeMap.loadingGroup.show();
-
-      // Give the UI a chance to refresh and show the loading state.
-      setTimeout(() => {
-        const baseName = playbackRecording.endsWith(".json")
-                       ? playbackRecording.slice(0, -5)
-                       : playbackRecording;
-
-        downloadReplay(baseName + ".replay", {
-          begin: playbackDataset.begin,
-          end: playbackDataset.end,
-          dataPoints: playbackDataset.dataPoints,
-          circles: playbackDataset.circles,
-          segments: playbackDataset.segments,
-        });
-
-        bikeMap.loadingGroup.hide();
-        bikeMap.playbackGroup.show();
-      }, 10);
-    });
+//    bikeMap.downloadButton.click(function() {
+//      bikeMap.playbackGroup.hide();
+//      bikeMap.loadingGroup.show();
+//
+//      // Give the UI a chance to refresh and show the loading state.
+//      setTimeout(() => {
+//        const baseName = playbackRecording.endsWith(".json")
+//                       ? playbackRecording.slice(0, -5)
+//                       : playbackRecording;
+//
+//        downloadReplay(baseName + ".replay", {
+//          begin: playbackDataset.begin,
+//          end: playbackDataset.end,
+//          dataPoints: playbackDataset.dataPoints,
+//          circles: playbackDataset.circles,
+//          segments: playbackDataset.segments,
+//        });
+//
+//        bikeMap.loadingGroup.hide();
+//        bikeMap.playbackGroup.show();
+//      }, 10);
+//    });
 
     // ----------------------------------------------------
 
@@ -380,8 +368,7 @@
         end: rawDataset.end,
       };
 
-      playbackFrameIdx = 0;
-      refreshView(playbackFrameIdx);
+      refreshView(playbackDataset.begin);
     };
 
     const PostProcessor = new CriticalSnake.PostProcessor();
@@ -396,7 +383,6 @@
       console.log("Circles:", circles);
       console.log("Populating circles took:", Date.now() - detectCirclesBegin, "ms");
 
-      const startTime = 1598638200000; // 2020-08-28, 20:10
       const associateSnakesBegin = Date.now();
       const snakes = PostProcessor.associateSnakes(dataPoints, circles);
       console.log("Snakes detected by origin:", snakes);
@@ -419,8 +405,7 @@
         end: timeRange.end.getTime(),
       };
 
-      playbackFrameIdx = 0;
-      refreshView(playbackFrameIdx);
+      refreshView(playbackDataset.begin);
     }
 
     function downloadReplay(filename, json) {
@@ -435,21 +420,17 @@
       saveAs(blob, filename);
     }
 
-    function refreshView(frameIdx) {
+    function refreshView(playbackTime) {
+      playbackTime = playbackTime || CriticalSnake.PlaybackStatus.frameTime;
+
       const refreshViewBegin = Date.now();
-      bikeMap.historySlider.val(frameIdx);
-
-      const duration = playbackDataset.end - playbackDataset.begin;
-      const offset = duration * (frameIdx / 500);
-      const timestamp = playbackDataset.begin + offset;
-
       const bikeCount = playbackDataset.circles
-                      ? drawTracks(playbackDataset, timestamp)
-                      : drawRawTracks(playbackDataset, timestamp);
+                      ? drawTracks(playbackDataset, playbackTime)
+                      : drawRawTracks(playbackDataset, playbackTime);
 
       // Adds a leading "0" for single digit values.
       const pad2 = (val) => (val < 10 ? "0" : "") + val;
-      const d = new Date(timestamp);
+      const d = new Date(playbackTime);
       bikeMap.statsLabel.text(
         `📅 ${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
         `🕗 ${pad2(d.getHours())}:${pad2(d.getMinutes())} ` +
@@ -461,46 +442,27 @@
 
     // ----------------------------------------------------
 
+    let playbackFPS = 1;
     let rotatingCollisionCircles = 0;
-    const drawFrameAction = () => {
+    bikeMap.playbackGroup.renderFrame = function(timestamp) {
       rotatingCollisionCircles += playbackFPS;
-      switch (playbackFrameIdx) {
-        case 0:
-          refreshView(playbackFrameIdx);
-          playbackFrameIdx += 1;
-          break;
-        case 500:
-          refreshView(playbackFrameIdx);
-          bikeMap.playbackButton.val("▶");
-          playbackFrameIdx = 0;
-          break;
-        default:
-          refreshView(playbackFrameIdx);
-          playbackFrameIdx += 1;
-          break;
+      refreshView(timestamp);
+    }
+
+    bikeMap.playbackGroup.playbackToggled = function(running) {
+      if (running) {
+        console.log(`Rendering ${playbackFPS}FPS (${1000 / playbackFPS}ms per frame)`);
+        bikeMap.postprocessGroup.enablePostprocessing(false);
       }
+      else {
+        bikeMap.postprocessGroup.enablePostprocessing(true);
+      }
+    }
+
+    bikeMap.playbackGroup.fpsChanged = function(fps) {
+      playbackFPS = fps;
+      console.log("FPS changed to", playbackFPS);
     };
-
-    function resume() {
-      console.log("Rendering", playbackFPS, "FPS (", 1000 / playbackFPS, "ms per frame)");
-      bikeMap.playbackButton.val("||");
-
-      const nextFrameAction = () => {
-        drawFrameAction();
-        if (isRunning())
-          setTimeout(nextFrameAction, 1000 / playbackFPS);
-      };
-
-      setTimeout(nextFrameAction, 1000 / playbackFPS);
-    }
-
-    function pause() {
-      bikeMap.playbackButton.val("▶");
-    }
-
-    function isRunning() {
-      return bikeMap.playbackButton.val() != "▶";
-    }
 
     // ----------------------------------------------------
 
