@@ -12,6 +12,8 @@ L.Control.PlaybackGroup = L.Control.extend({
     },
   },
 
+  // Public interface
+
   initialize: function(options) {
     L.setOptions(this, options);
   },
@@ -24,24 +26,9 @@ L.Control.PlaybackGroup = L.Control.extend({
     this.groupControl.style.display = "none";
   },
 
-  isRunning: function() {
-    return this.options.status.running || false;
-  },
-
-  _permilleToTimestamp: (permille) => {
-    console.error("Missing initialization of PlaybackGroup: call `setTimeRange(begin, end)`");
-  },
-
-  _timestampToPermille: (stamp) => {
-    console.error("Missing initialization of PlaybackGroup: call `setTimeRange(begin, end)`");
-  },
-
+  // `setTimeRange()` must be called at least once before playback starts.
+  // It can be called again without rebuilding the UI.
   setTimeRange: function(firstStamp, lastStamp) {
-    if (!this.groupControl) {
-      console.error("Cannot set time range: the control is not part of the map");
-      return;
-    }
-
     this.options.status.frameTime = firstStamp;
     this.options.status.duration = lastStamp - firstStamp;
 
@@ -59,11 +46,36 @@ L.Control.PlaybackGroup = L.Control.extend({
     this.historySlider.value = this._timestampToPermille(firstStamp);
   },
 
+  _permilleToTimestamp: (permille) => {
+    console.error("Missing initialization of PlaybackGroup: call `setTimeRange(begin, end)`");
+  },
+
+  _timestampToPermille: (stamp) => {
+    console.error("Missing initialization of PlaybackGroup: call `setTimeRange(begin, end)`");
+  },
+
+  // Optional overrides and event subscriptions
+
+  playbackToggled: (running) => {
+    console.log("Playback button clicked in PlaybackGroup");
+  },
+
+  renderFrame: (timestamp) => {
+    console.log("Trigger rendering for a new frame from PlaybackGroup");
+  },
+
+  limitFps: (fps) => {
+    console.log("Accepting autoLimitFPS:", fps);
+    return true;
+  },
+
+  // Implementation
+
   onAdd: function() {
-    this.groupControl = this.createGroupControl();
-    this.playbackButton = this.addPlaybackButton(this.groupControl);
-    this.historySlider = this.addHistorySlider(this.groupControl);
-    this.addFpsControls(this.groupControl);
+    this.groupControl = this._createGroupControl();
+    this.playbackButton = this._addPlaybackButton(this.groupControl);
+    this.historySlider = this._addHistorySlider(this.groupControl);
+    this._addFpsControls(this.groupControl);
 
     return this.groupControl;
   },
@@ -73,9 +85,9 @@ L.Control.PlaybackGroup = L.Control.extend({
     this.historySlider = null;
   },
 
-  createGroupControl: function() {
+  _createGroupControl: function() {
     const group = L.DomUtil.create('div', 'leaflet-bar');
-    group.style.display = "flex";
+    group.style.display = "none";
     group.style.alignItems = "center";
     group.style.backgroundColor = "#fff";
     group.style.padding = "5px";
@@ -90,13 +102,18 @@ L.Control.PlaybackGroup = L.Control.extend({
     return group;
   },
 
+  _setPlaybackState: function(running) {
+    this.playbackButton.value = (running ? "||" : "▶");
+    this.options.status.running = running;
+    this.playbackToggled(running);
+  },
+
   _nextFrame: function(increment) {
     this.options.status.frameTime += increment;
     const permille = this._timestampToPermille(this.options.status.frameTime);
     if (permille >= 1000) {
       this.historySlider.value = 1000;
-      this.options.status.running = false;
-      this.playbackButton.value = "▶";
+      this._setPlaybackState(false);
       return false;
     }
     else if (this.options.status.running) {
@@ -147,29 +164,24 @@ L.Control.PlaybackGroup = L.Control.extend({
     loop(loop);
   },
 
-  addPlaybackButton: function(parent) {
+  _addPlaybackButton: function(parent) {
     const button = L.DomUtil.create('input', '', parent);
     button.type = "button";
     button.value = "▶";
+    button.style.width = "2rem";
+    button.style.height = "1.5rem";
     button.style.border = "0";
 
     L.DomEvent.on(button, "click", () => {
-      if (this.options.status.running) {
-        button.value = "▶";
-        this.options.status.running = false;
-        this.playbackToggled(this.options.status.running);
-      }
-      else {
-        button.value = "||";
-        this.options.status.running = true;
-        this.playbackToggled(this.options.status.running);
+      this._setPlaybackState(!this.options.status.running);
+      if (this.options.status.running)
         this._runPlayback();
-      }
     });
+
     return button;
   },
 
-  addHistorySlider: function(parent) {
+  _addHistorySlider: function(parent) {
     const slider = L.DomUtil.create('input', '', parent);
     slider.type = "range";
     slider.min = 0;
@@ -188,7 +200,7 @@ L.Control.PlaybackGroup = L.Control.extend({
     return slider;
   },
 
-  addFpsControls: function(parent) {
+  _addFpsControls: function(parent) {
     const label = L.DomUtil.create('label', '', parent);
     label.innerHTML = "Speedup:";
     label.htmlFor = "fpsInput";
@@ -214,20 +226,5 @@ L.Control.PlaybackGroup = L.Control.extend({
 
     return input;
   },
-
-  // Optional overrides for event subscriptions
-
-  playbackToggled: (running) => {
-    console.log("Playback button clicked in PlaybackGroup");
-  },
-
-  renderFrame: (timestamp) => {
-    console.log("Trigger rendering for a new frame from PlaybackGroup");
-  },
-
-  limitFps: (fps) => {
-    console.log("Accepting autoLimitFPS:", fps);
-    return true;
-  }
 
 });

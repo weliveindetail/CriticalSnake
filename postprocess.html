@@ -102,6 +102,8 @@
       snakeColors: CriticalSnake.PlaybackOptions.snakeColors,
     });
 
+    bikeMap.playbackGroup.addTo(bikeMap);
+
     let playbackDataset = null;
     let rawDataset = {};
     let playbackRecording = null;
@@ -110,7 +112,7 @@
       // Validate selection and set visual indication for the loading progress.
       bikeMap.browseGroup.hide();
       bikeMap.loadingGroup.show();
-      bikeMap.playbackGroup.remove();
+      bikeMap.playbackGroup.hide();
       bikeMap.postprocessGroup.remove();
 
       if (this.files.length == 0)
@@ -134,7 +136,6 @@
           bikeMap.postprocessGroup.addTo(bikeMap);
           bikeMap.postprocessGroup.show();
 
-          bikeMap.playbackGroup.addTo(bikeMap);
           bikeMap.playbackGroup.setTimeRange(playbackDataset.begin, playbackDataset.end);
           bikeMap.playbackGroup.show();
         }
@@ -258,7 +259,7 @@
       bikeMap.postprocessGroup.hide();
       bikeMap.statsLabel.hide();
       bikeMap.loadingGroup.show();
-      bikeMap.playbackGroup.remove();
+      bikeMap.playbackGroup.hide();
 
       // Give the UI a chance to refresh and show the loading state.
       setTimeout(() => {
@@ -266,7 +267,7 @@
           postprocessRecording();
 
           bikeMap.playbackGroup.setTimeRange(playbackDataset.begin, playbackDataset.end);
-          bikeMap.playbackGroup.addTo(bikeMap);
+          bikeMap.playbackGroup.show();
           bikeMap.statsLabel.show();
         }
         catch (ex) {
