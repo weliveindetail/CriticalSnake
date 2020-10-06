@@ -85,7 +85,6 @@ function createBikeMap(L, options) {
   (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
   (new L.Control.BrowseGroup({ position: 'bottomleft' })).addTo(bikeMap);
   (new L.Control.LoadingGroup({ position: 'bottomleft' })).addTo(bikeMap);
-  (new L.Control.Zoom({ position: 'bottomleft' })).addTo(bikeMap);
 
   bikeMap.statsLabel = $("#statsLabel");
 

@@ -88,6 +88,8 @@
     bikeMap.loadingGroup.hide();
     bikeMap.statsLabel.hide();
 
+    bikeMap.zoomGroup = new L.Control.Zoom({ position: 'bottomleft' });
+
     bikeMap.playbackGroup = new L.Control.PlaybackGroup({
       position: 'bottomleft',
       fps: CriticalSnake.PlaybackOptions.fps,
@@ -102,7 +104,10 @@
       snakeColors: CriticalSnake.PlaybackOptions.snakeColors,
     });
 
+    // We use the default zoom controls group, but we add the playback group
+    // first, so that it shows up below the zoom group.
     bikeMap.playbackGroup.addTo(bikeMap);
+    bikeMap.zoomGroup.addTo(bikeMap);
 
     let playbackDataset = null;
     let rawDataset = {};
