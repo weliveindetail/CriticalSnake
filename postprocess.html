@@ -283,28 +283,28 @@
       }, 10);
     };
 
-//    bikeMap.downloadButton.click(function() {
-//      bikeMap.playbackGroup.hide();
-//      bikeMap.loadingGroup.show();
-//
-//      // Give the UI a chance to refresh and show the loading state.
-//      setTimeout(() => {
-//        const baseName = playbackRecording.endsWith(".json")
-//                       ? playbackRecording.slice(0, -5)
-//                       : playbackRecording;
-//
-//        downloadReplay(baseName + ".replay", {
-//          begin: playbackDataset.begin,
-//          end: playbackDataset.end,
-//          dataPoints: playbackDataset.dataPoints,
-//          circles: playbackDataset.circles,
-//          segments: playbackDataset.segments,
-//        });
-//
-//        bikeMap.loadingGroup.hide();
-//        bikeMap.playbackGroup.show();
-//      }, 10);
-//    });
+    bikeMap.playbackGroup.downloadClicked = function() {
+      bikeMap.playbackGroup.hide();
+      bikeMap.loadingGroup.show();
+
+      // Give the UI a chance to refresh and show the loading state.
+      setTimeout(() => {
+        const baseName = playbackRecording.endsWith(".json")
+                       ? playbackRecording.slice(0, -5)
+                       : playbackRecording;
+
+        downloadReplay(baseName + ".replay", {
+          begin: playbackDataset.begin,
+          end: playbackDataset.end,
+          dataPoints: playbackDataset.dataPoints,
+          circles: playbackDataset.circles,
+          segments: playbackDataset.segments,
+        });
+
+        bikeMap.loadingGroup.hide();
+        bikeMap.playbackGroup.show();
+      }, 10);
+    };
 
     // ----------------------------------------------------
 

@@ -69,10 +69,15 @@ L.Control.PlaybackGroup = L.Control.extend({
     return true;
   },
 
+  downloadClicked: () => {
+    console.log("Download button clicked in PlaybackGroup");
+  },
+
   // Implementation
 
   onAdd: function() {
     this.groupControl = this._createGroupControl();
+    this.downloadButton = this._addDownloadButton(this.groupControl);
     this.playbackButton = this._addPlaybackButton(this.groupControl);
     this.historySlider = this._addHistorySlider(this.groupControl);
     this._addFpsControls(this.groupControl);
@@ -100,6 +105,18 @@ L.Control.PlaybackGroup = L.Control.extend({
     }
 
     return group;
+  },
+
+  _addDownloadButton: function(parent) {
+    const button = L.DomUtil.create('input', '', parent);
+    button.type = "button";
+    button.value = "💾";
+    button.style.border = "0";
+    button.style.width = "2rem";
+    button.style.height = "1.5rem";
+    button.style.marginRight = "0.4em";
+    L.DomEvent.on(button, "click", () => this.downloadClicked());
+    return button;
   },
 
   _setPlaybackState: function(running) {
