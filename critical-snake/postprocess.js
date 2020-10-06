@@ -1,25 +1,24 @@
-(function(CriticalSnake, _, L, LatLon) {
+(function(CriticalSnake, L, LatLon) {
 
-function missingDependency(name) {
-  console.error("Cannot instantiate CriticalSnake. Please include", name,
-                "first.");
-}
-if (typeof(_) != "function")
-  return missingDependency("Lodash");
 if (typeof(L) != "object")
-  return missingDependency("Leaflet");
+  return CriticalSnake.missingDependency("Leaflet");
 if (typeof(LatLon) != "function")
-  return missingDependency("Geodesy spherical functions");
+  return CriticalSnake.missingDependency("Geodesy spherical functions");
 
 // Make options accessible from the browser's debug console. The actual options
 // are populated when creating a CriticalSnake.PostProcessor().
 CriticalSnake.PostProcessOptions = {};
 
-CriticalSnake.mergePostProcessOptions = function(incoming) {
-  // In lodash's merge implementation, the latest occurrence of a duplicate key
-  // takes precedence.
+// Incoming keys take precedence.
+CriticalSnake.overridePostprocessOptions = function(incoming) {
   CriticalSnake.PostProcessOptions =
-      _.merge(CriticalSnake.PostProcessOptions, incoming);
+      CriticalSnake.mergeOptions(CriticalSnake.PostProcessOptions, incoming);
+};
+
+// Existing keys take precedence.
+CriticalSnake.populatePostprocessOptions = function(incoming) {
+  CriticalSnake.PostProcessOptions =
+      CriticalSnake.mergeOptions(incoming, CriticalSnake.PostProcessOptions);
 };
 
 CriticalSnake.FilterBounds = {
@@ -61,7 +60,7 @@ CriticalSnake.PostProcessor = function() {
     return leafletToGeodesy(c1).bearingTo(leafletToGeodesy(c2));
   }
 
-  CriticalSnake.mergePostProcessOptions({
+  CriticalSnake.populatePostprocessOptions({
     loadRawTracks: {}
   });
 
@@ -195,7 +194,7 @@ CriticalSnake.PostProcessor = function() {
     return [ tracks, dataPoints ];
   }
 
-  CriticalSnake.mergePostProcessOptions({
+  CriticalSnake.populatePostprocessOptions({
     analyzeTracks: {
       startStamp: 0,
       endStamp: 8640000000000000,
@@ -528,7 +527,7 @@ CriticalSnake.PostProcessor = function() {
     return createCircle(latLng, matches, circles, dataPoints);
   }
 
-  CriticalSnake.mergePostProcessOptions({
+  CriticalSnake.populatePostprocessOptions({
     detectCircles: {
       tolerance: {
         latitude: 0.001,
@@ -596,7 +595,7 @@ CriticalSnake.PostProcessor = function() {
     return circles;
   }; // CriticalSnake.PostProcessor.detectCircles()
 
-  CriticalSnake.mergePostProcessOptions({
+  CriticalSnake.populatePostprocessOptions({
     associateSnakes: {
       startTime: null,
       expectedNumberOfSnakes: -1,
@@ -673,7 +672,7 @@ CriticalSnake.PostProcessor = function() {
     return true;
   };
 
-  CriticalSnake.mergePostProcessOptions({
+  CriticalSnake.populatePostprocessOptions({
     populateTrackSegments: {
       minSegmentLength: 10,
       bridgeGapsLookahead: 5,
@@ -754,4 +753,4 @@ CriticalSnake.PostProcessor = function() {
 
 }; // CriticalSnake.PostProcessor
 
-})(window.CriticalSnake = window.CriticalSnake || {}, _, L, LatLon);
+})(window.CriticalSnake = window.CriticalSnake || {}, L, LatLon);

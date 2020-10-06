@@ -1,11 +1,7 @@
 (function(CriticalSnake, L) {
 
-function missingDependency(name) {
-  console.error("Cannot instantiate CriticalSnake. Please include", name,
-                "first.");
-}
 if (typeof(L) != "object")
-  return missingDependency("Leaflet");
+  return CriticalSnake.missingDependency("Leaflet");
 
 // Make the playback status accessible to the browser's debug console.
 CriticalSnake.PlaybackStatus = {
@@ -33,30 +29,11 @@ CriticalSnake.PlaybackOptions = {
   center: null,
 };
 
-function isObject(item) {
-  return item && typeof(item) === 'object' && !Array.isArray(item);
-}
-
-function mergeDeep(target, source) {
-  if (isObject(target) && isObject(source)) {
-    for (const key in source) {
-      if (isObject(source[key])) {
-        if (!target[key])
-          Object.assign(target, { [key]: {} });
-        mergeDeep(target[key], source[key]);
-      } else {
-        Object.assign(target, { [key]: source[key] });
-      }
-    }
-  }
-  return target;
-}
-
 // Use this function to partially override PlaybackOptions.
-CriticalSnake.mergePlaybackOptions = function(incoming) {
+CriticalSnake.overridePlaybackOptions = function(incoming) {
   // The latest occurrence of a duplicate key takes precedence.
   CriticalSnake.PlaybackOptions =
-      mergeDeep(CriticalSnake.PlaybackOptions, incoming);
+      CriticalSnake.mergeOptions(CriticalSnake.PlaybackOptions, incoming);
 };
 
 // TODO

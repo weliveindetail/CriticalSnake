@@ -62,14 +62,14 @@
   <script src="3rd-party/lzstring14/lz-string.min.js"></script>
   <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
   <script src="3rd-party/nouislider14/nouislider.min.js"></script>
-  <script src="3rd-party/lodash417/lodash.min.js"></script>
   <script src="3rd-party/vanilla-picker/vanilla-picker.min.js"></script>
 
+  <script src="critical-snake/core.js"></script>
   <script src="critical-snake/postprocess.js"></script>
-  <script src="critical-snake/bikemap.js"></script>
-  <script src="critical-snake/postprocess-controls.js"></script>
   <script src="critical-snake/playback.js"></script>
+  <script src="critical-snake/postprocess-controls.js"></script>
   <script src="critical-snake/playback-controls.js"></script>
+  <script src="critical-snake/bikemap.js"></script>
 
   <script>
     function parseUrlParams(url) {
@@ -153,7 +153,7 @@
       // `CriticalSnake.PostProcessOptions` instead of passing them to the
       // individual functions. It allows users to query and modify them easily
       // from the browser's debug console.
-      CriticalSnake.mergePostProcessOptions({
+      CriticalSnake.overridePostprocessOptions({
         analyzeTracks: {
           startStamp: timeRange.start,
           endStamp: timeRange.end,
@@ -171,7 +171,7 @@
       }
 
       console.log("Set data-point filter to", val);
-      CriticalSnake.mergePostProcessOptions({
+      CriticalSnake.overridePostprocessOptions({
         analyzeTracks: { filterName: val },
       });
 
@@ -222,8 +222,8 @@
       const lev2 = location || CriticalSnake.PostProcessOptions.analyzeTracks.filterName;
 
       if (allOpts.hasOwnProperty(lev1) && allOpts[lev1].hasOwnProperty(lev2)) {
-        CriticalSnake.mergePostProcessOptions(allOpts[lev1][lev2].postprocess);
-        CriticalSnake.mergePlaybackOptions(allOpts[lev1][lev2].playback);
+        CriticalSnake.overridePostprocessOptions(allOpts[lev1][lev2].postprocess);
+        CriticalSnake.overridePlaybackOptions(allOpts[lev1][lev2].playback);
         console.log("Restored options for", playbackRecording, `(${lev2}):`,
                     allOpts[lev1][lev2]);
       } else {
