@@ -91,6 +91,8 @@
     bikeMap.playbackGroup = new L.Control.PlaybackGroup({
       position: 'bottomleft',
       fps: CriticalSnake.PlaybackOptions.fps,
+      speedup: CriticalSnake.PlaybackOptions.speedup,
+      autoLimitFps: CriticalSnake.PlaybackOptions.defaultEnable.autoLimitFps,
       status: CriticalSnake.PlaybackStatus,
     });
 

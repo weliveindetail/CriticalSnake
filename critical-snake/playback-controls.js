@@ -3,6 +3,8 @@ L.Control.PlaybackGroup = L.Control.extend({
 
   options: {
     fps: 20,
+    speedup: 500,
+    autoLimitFps: true,
     status: {
       running: false,
       frameTime: 0,
@@ -59,7 +61,7 @@ L.Control.PlaybackGroup = L.Control.extend({
 
   onAdd: function() {
     this.groupControl = this.createGroupControl();
-    this.addPlaybackButton(this.groupControl);
+    this.playbackButton = this.addPlaybackButton(this.groupControl);
     this.historySlider = this.addHistorySlider(this.groupControl);
     this.addFpsControls(this.groupControl);
 
@@ -88,24 +90,58 @@ L.Control.PlaybackGroup = L.Control.extend({
     return group;
   },
 
+  _nextFrame: function(increment) {
+    this.options.status.frameTime += increment;
+    const permille = this._timestampToPermille(this.options.status.frameTime);
+    if (permille >= 1000) {
+      this.historySlider.value = 1000;
+      this.options.status.running = false;
+      this.playbackButton.value = "▶";
+      return false;
+    }
+    else if (this.options.status.running) {
+      this.historySlider.value = permille;
+      return true;
+    }
+    else {
+      return false;
+    }
+  },
+
+  _mayLimitFps: function(begin, frameDuration) {
+    if (this.options.autoLimitFps) {
+      const runtime = Date.now() - begin;
+      if (runtime > frameDuration && this.limitFps(1000 / runtime)) {
+        this.options.fps = 1000 / runtime;
+      }
+    }
+  },
+
   _runPlayback: function() {
-    this.renderFrame(this.options.status.frameTime);
-    this.historySlider.value = this._timestampToPermille(this.options.status.frameTime);
+    // If we sit on the last frame, then restart automatically.
+    if (this.historySlider.value == 1000) {
+      this.historySlider.value = 0;
+      this.options.status.frameTime = this._permilleToTimestamp(0);
+    }
+    else {
+      this.historySlider.value = this._timestampToPermille(this.options.status.frameTime);
+    }
 
     // The playback loop retriggers itself via the continuation.
     const loop = (loop) => {
-      console.log(this.options.status);
-      this.options.status.frameTime += 50 * 100; // speed factor 100 at 20fps
+      const loopBegin = Date.now();
+
+      // Increment frameTime, update controls states and schedule next frame.
+      const frameDuration = 1000 / this.options.fps;
+      if (this._nextFrame(frameDuration * this.options.speedup)) {
+        setTimeout(() => loop(loop), frameDuration);
+      }
+
+      // Actually draw the frame.
       this.renderFrame(this.options.status.frameTime);
 
-      const permille = this._timestampToPermille(this.options.status.frameTime);
-      if (permille >= 1000) {
-        this.historySlider.value = 1000;
-      }
-      else if (this.options.status.running) {
-        this.historySlider.value = Math.round(permille);
-        setTimeout(() => loop(loop), 50); // 20 fps
-      }
+      // Reduce FPS if execution time exceeds available time per frame.
+      this._mayLimitFps(loopBegin, frameDuration);
     };
 
     loop(loop);
@@ -130,6 +166,7 @@ L.Control.PlaybackGroup = L.Control.extend({
         this._runPlayback();
       }
     });
+    return button;
   },
 
   addHistorySlider: function(parent) {
@@ -152,23 +189,28 @@ L.Control.PlaybackGroup = L.Control.extend({
   },
 
   addFpsControls: function(parent) {
+    const label = L.DomUtil.create('label', '', parent);
+    label.innerHTML = "Speedup:";
+    label.htmlFor = "fpsInput";
+    label.style.padding = "0 5px";
+    label.style.marginLeft = "0.5rem";
+
     const input = L.DomUtil.create('input', '', parent);
     input.type = "number";
     input.id = "fpsInput";
-    input.min = "1";
-    input.max = "100";
-    input.value = this.options.fps;
+    input.min = 50;
+    input.max = 9000;
+    input.step = 50;
+    input.value = Math.round(this.options.speedup / 50) * 50;
     input.style.width = "3rem";
     input.style.textAlign = "right";
-    input.style.marginLeft = "0.5rem";
 
-    const label = L.DomUtil.create('label', '', parent);
-    label.innerHTML = "x";
-    label.htmlFor = "fpsInput";
-    label.style.padding = "0 3px";
-
-    L.DomEvent.on(input, "change", value => this.fpsChanged(parseInt(value)));
     L.DomEvent.on(input, "keydown", e => e.preventDefault());
+    L.DomEvent.on(input, "change", e => {
+      const value = Math.round(parseInt(input.value) / 50) * 50;
+      this.options.speedup = value;
+      input.value = value;
+    });
 
     return input;
   },
@@ -183,8 +225,9 @@ L.Control.PlaybackGroup = L.Control.extend({
     console.log("Trigger rendering for a new frame from PlaybackGroup");
   },
 
-  fpsChanged: (fps) => {
-    console.log("FPS changed in PlaybackGroup changed:", filterName);
+  limitFps: (fps) => {
+    console.log("Accepting autoLimitFPS:", fps);
+    return true;
   }
 
 });

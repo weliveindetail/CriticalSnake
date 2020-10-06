@@ -13,9 +13,17 @@ CriticalSnake.PlaybackStatus = {
 // Make options accessible to the browser's debug console.
 CriticalSnake.PlaybackOptions = {
   defaultEnable: {
+    // Draw the circles that approximate the current mass.
     drawCircles: true,
+
+    // Draw the tracks on which people have been riding so far.
     drawTracks: !L.Browser.mobile,
+
+    // Automatically reduce FPS if rendering takes more time then the slot
+    // currently offers.
+    autoLimitFps: true,
   },
+
   defaultColor: "#888", // grey
   snakeColors: [
     "#c90002", // red
@@ -24,7 +32,13 @@ CriticalSnake.PlaybackOptions = {
     "#005214", // green
     "#8b00ff", // violett
   ],
+
+  // Number of calculated frames per second.
   fps: 20,
+
+  // The speed of the replay relative to realtime.
+  speedup: 500,
+
   zoom: 13,
   center: null,
 };
