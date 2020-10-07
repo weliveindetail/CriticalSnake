@@ -94,7 +94,7 @@
       position: 'bottomleft',
       fps: CriticalSnake.PlaybackOptions.fps,
       speedup: CriticalSnake.PlaybackOptions.speedup,
-      autoLimitFps: CriticalSnake.PlaybackOptions.defaultEnable.autoLimitFps,
+      autoLimitFps: CriticalSnake.PlaybackOptions.autoLimitFps,
       status: CriticalSnake.PlaybackStatus,
     });
 
@@ -450,22 +450,23 @@
 
     // ----------------------------------------------------
 
-    let playbackFPS = 1;
-    let rotatingCollisionCircles = 0;
     bikeMap.playbackGroup.renderFrame = function(timestamp) {
-      rotatingCollisionCircles += playbackFPS;
       refreshView(timestamp);
     }
 
     bikeMap.playbackGroup.playbackToggled = function(running) {
       if (running) {
-        console.log(`Rendering ${playbackFPS}FPS (${1000 / playbackFPS}ms per frame)`);
+        const fps = CriticalSnake.PlaybackOptions.fps;
+        const speed = CriticalSnake.PlaybackOptions.speedup;
+        console.log(`Replay ${fps}FPS in ${speed}x time-lapse`);
         bikeMap.postprocessGroup.enablePostprocessing(false);
       }
       else {
         bikeMap.postprocessGroup.enablePostprocessing(true);
       }
     }
+
+    // ----------------------------------------------------
 
     function drawFilterBounds(color, weight, opacity) {
       bikeMap.removeLayer(trackHeads);

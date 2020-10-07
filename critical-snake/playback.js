@@ -4,10 +4,15 @@ if (typeof(L) != "object")
   return CriticalSnake.missingDependency("Leaflet");
 
 // Make the playback status accessible to the browser's debug console.
-CriticalSnake.PlaybackStatus = {
-  running: false,
-  frameTime: 0,
-  duration: 1,
+CriticalSnake.PlaybackStatus = {};
+
+// Make options accessible to the browser's debug console.
+CriticalSnake.PlaybackOptions = {
+  // Number of calculated frames per second.
+  fps: 20,
+
+  // The speed of the replay relative to realtime.
+  speedup: 500,
 
   // Draw the circles that approximate the current mass.
   drawCircles: true,
@@ -18,23 +23,11 @@ CriticalSnake.PlaybackStatus = {
   // Automatically reduce FPS if rendering takes more time then the slot
   // currently offers.
   autoLimitFps: true,
-};
 
-// Make options accessible to the browser's debug console.
-CriticalSnake.PlaybackOptions = {
-  defaultEnable: {
-    // Draw the circles that approximate the current mass.
-    drawCircles: true,
-
-    // Draw the tracks on which people have been riding so far.
-    drawTracks: !L.Browser.mobile,
-
-    // Automatically reduce FPS if rendering takes more time then the slot
-    // currently offers.
-    autoLimitFps: true,
-  },
-
+  // The color used to draw tracks and circles not associated with a snake.
   defaultColor: "#888", // grey
+
+  // Colors for tracks and circles by snake-index.
   snakeColors: [
     "#c90002", // red
     "#1b3d9f", // blue
@@ -43,13 +36,10 @@ CriticalSnake.PlaybackOptions = {
     "#8b00ff", // violett
   ],
 
-  // Number of calculated frames per second.
-  fps: 20,
-
-  // The speed of the replay relative to realtime.
-  speedup: 500,
-
+  // Zoom level when starting the replay.
   zoom: 13,
+
+  // LatLng to pan the view to, when the replay starts.
   center: null,
 };
 
@@ -60,7 +50,6 @@ CriticalSnake.overridePlaybackOptions = function(incoming) {
       CriticalSnake.mergeOptions(CriticalSnake.PlaybackOptions, incoming);
 };
 
-// TODO
 CriticalSnake.Playback = function(bikeMap) {
 
   const emptyDataset = {
@@ -95,14 +84,14 @@ CriticalSnake.Playback = function(bikeMap) {
     }
 
     // Draw post-processed tracks. It's not really suitable for counting bikes.
-    if (CriticalSnake.PlaybackStatus.drawTracks) {
+    if (CriticalSnake.PlaybackOptions.drawTracks) {
       drawTracks(shadows, this.dataset.dataPoints, this.dataset.segments,
                  playbackTime);
       shadows.addTo(bikeMap);
     }
 
     // Draw post-processed circles and count bikes while drawing.
-    if (CriticalSnake.PlaybackStatus.drawCircles) {
+    if (CriticalSnake.PlaybackOptions.drawCircles) {
       const visibleBikes = drawCircles(highlights, this.dataset.dataPoints,
                                         this.dataset.circles, playbackTime);
       highlights.addTo(bikeMap);
@@ -218,7 +207,7 @@ CriticalSnake.Playback = function(bikeMap) {
           canvas.addLayer(fullCircle(circle, circle.snakeIdxs[0]));
           break;
         default:
-          let angle = 0; //rotatingCollisionCircles;
+          let angle = (stamp / (3 * 1000)) % 360;
           const arcSize = 360 / circle.snakeIdxs.length;
           for (const idx of circle.snakeIdxs) {
             canvas.addLayer(semiCircle(circle, idx, angle, angle + arcSize));
