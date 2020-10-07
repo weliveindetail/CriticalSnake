@@ -131,8 +131,10 @@
       $(reader).on('load', (event) => {
         try {
           playbackRecording = this.files[0].name;
-          const isCompressed = playbackRecording.endsWith(".recording");
-          const snapshots = parseSnapshots(event.target.result, isCompressed);
+          const snapshots = parseSnapshots(
+              event.target.result,
+              playbackRecording.endsWith(".recording"),
+              playbackRecording.endsWith(".wget"));
 
           loadRawTracks(snapshots);
           bikeMap.statsLabel.show();
@@ -327,9 +329,18 @@
       return content.split('').reduce(it, 0);
     }
 
-    function parseSnapshots(content, isCompressed) {
+    function parseSnapshots(content, isCompressed, isWget) {
       const decompressed = isCompressed ? decompressDataset(content) : content;
       playbackRecordingHash = hashCode(decompressed);
+
+      // Consider each line a raw snapshot from https://api.criticalmaps.net/postv2
+      if (isWget) {
+        const json = {};
+        decompressed.split("\n")
+                    .filter(line => line.length > 0)
+                    .forEach((line, i) => json[i] = JSON.parse(line).locations);
+        return json;
+      }
 
       return JSON.parse(decompressed);
     }
