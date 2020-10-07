@@ -30,13 +30,31 @@ function createBikeMap(L, options) {
 
   L.Control.StatsView = L.Control.extend({
     onAdd: function() {
-      const statsLabel = L.DomUtil.create('label', 'leaflet-bar');
-      statsLabel.id = "statsLabel";
-      statsLabel.style.padding = "3px 8px";
-      statsLabel.style.backgroundColor = "#fff";
-      controlGroups.push(statsLabel);
-      return statsLabel;
-    }
+      this.label = L.DomUtil.create('label', 'leaflet-bar');
+      this.label.style.padding = "3px 8px";
+      this.label.style.backgroundColor = "#fff";
+      this.label.style.display = "none";
+      controlGroups.push(this.label);
+      return this.label;
+    },
+
+    update: function(time, bikeCount) {
+      // Adds a leading "0" for single digit values.
+      const OO = (val) => (val < 10 ? "0" : "") + val;
+      const d = new Date(time);
+      this.label.innerHTML =
+          `📅 ${d.getFullYear()}-${OO(d.getMonth() + 1)}-${OO(d.getDate())} ` +
+          `🕗 ${OO(d.getHours())}:${OO(d.getMinutes())} ` +
+          `📍🚲 ${bikeCount}`;
+    },
+
+    show: function() {
+      this.label.style.display = "block";
+    },
+
+    hide: function() {
+      this.label.style.display = "none";
+    },
   });
 
   L.Control.BrowseGroup = L.Control.extend({
@@ -82,11 +100,11 @@ function createBikeMap(L, options) {
     },
   });
 
-  (new L.Control.StatsView({ position: 'topleft' })).addTo(bikeMap);
+  bikeMap.zoomButtons = new L.Control.Zoom({ position: 'bottomleft' });
+  bikeMap.statsLabel = new L.Control.StatsView({ position: 'topleft' });
+
   (new L.Control.BrowseGroup({ position: 'bottomleft' })).addTo(bikeMap);
   (new L.Control.LoadingGroup({ position: 'bottomleft' })).addTo(bikeMap);
-
-  bikeMap.statsLabel = $("#statsLabel");
 
   bikeMap.browseGroup = $("#browseGroup");
   bikeMap.browseButton = $("#browseButton");

@@ -86,9 +86,6 @@
     const bikeMap = createBikeMap(L);
     bikeMap.browseGroup.show();
     bikeMap.loadingGroup.hide();
-    bikeMap.statsLabel.hide();
-
-    bikeMap.zoomGroup = new L.Control.Zoom({ position: 'bottomleft' });
 
     bikeMap.playbackGroup = new L.Control.PlaybackGroup({
       position: 'bottomleft',
@@ -107,7 +104,8 @@
     // We use the default zoom controls group, but we add the playback group
     // first, so that it shows up below the zoom group.
     bikeMap.playbackGroup.addTo(bikeMap);
-    bikeMap.zoomGroup.addTo(bikeMap);
+    bikeMap.zoomButtons.addTo(bikeMap);
+    bikeMap.statsLabel.addTo(bikeMap);
 
     const playback = new CriticalSnake.Playback(bikeMap);
 
@@ -435,14 +433,7 @@
 
       const refreshViewBegin = Date.now();
       const bikeCount = playback.drawScene(playbackTime);
-
-      // Adds a leading "0" for single digit values.
-      const pad2 = (val) => (val < 10 ? "0" : "") + val;
-      const d = new Date(playbackTime);
-      bikeMap.statsLabel.text(
-        `📅 ${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
-        `🕗 ${pad2(d.getHours())}:${pad2(d.getMinutes())} ` +
-        `📍🚲 ${bikeCount}`);
+      bikeMap.statsLabel.update(playbackTime, bikeCount);
 
       const diff = Date.now() - refreshViewBegin;
       console.log("Rendering frame took:", Math.round(diff / 10) * 10, "ms");
