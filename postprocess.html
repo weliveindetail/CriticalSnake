@@ -110,8 +110,8 @@
     const playback = new CriticalSnake.Playback(bikeMap);
 
     let rawDataset = {};
-    let playbackRecording = null;
-    let playbackRecordingHash = null;
+    let sourceFileName = null;
+    let sourceFileHash = null;
     bikeMap.browseButton.change(function() {
       // Validate selection and set visual indication for the loading progress.
       bikeMap.browseGroup.hide();
@@ -128,22 +128,22 @@
       const reader = new FileReader();
       $(reader).on('load', (event) => {
         try {
-          playbackRecording = this.files[0].name;
+          sourceFileName = this.files[0].name;
           const snapshots = parseSnapshots(
               event.target.result,
-              playbackRecording.endsWith(".recording"),
-              playbackRecording.endsWith(".wget"));
+              sourceFileName.endsWith(".recording"),
+              sourceFileName.endsWith(".wget"));
 
-          loadRawTracks(snapshots);
-          bikeMap.statsLabel.show();
+          playback.setDataset(loadRawTracks(snapshots));
+          refreshView(playback.dataset.begin);
 
           restoreOptions();
           resetOptionsForPostprocessGroup(bikeMap.postprocessGroup.options);
           bikeMap.postprocessGroup.addTo(bikeMap);
           bikeMap.postprocessGroup.show();
 
-          bikeMap.playbackGroup.setTimeRange(playback.dataset.begin, playback.dataset.end);
-          bikeMap.playbackGroup.show();
+          bikeMap.playbackGroup.show(playback.dataset.begin, playback.dataset.end);
+          bikeMap.statsLabel.show();
         }
         catch (ex) {
           bikeMap.browseGroup.show();
@@ -208,7 +208,7 @@
 
       // Add/overwrite options in the two-level registry (the current
       // recording's hash-code and the name of the location-filter).
-      const lev1 = playbackRecordingHash;
+      const lev1 = sourceFileHash;
       const lev2 = CriticalSnake.PostProcessOptions.analyzeTracks.filterName;
 
       allOpts[lev1] = allOpts[lev1] || {};
@@ -218,7 +218,7 @@
       };
 
       localStorage.setItem(key, JSON.stringify(allOpts));
-      console.log("Stored options for", playbackRecording, `(${lev2}):`,
+      console.log("Stored options for", sourceFileName, `(${lev2}):`,
                   allOpts[lev1][lev2]);
     };
 
@@ -227,16 +227,16 @@
       const val = localStorage.getItem(key);
       const allOpts = val ? JSON.parse(val) : {};
 
-      const lev1 = playbackRecordingHash.toString();
+      const lev1 = sourceFileHash.toString();
       const lev2 = location || CriticalSnake.PostProcessOptions.analyzeTracks.filterName;
 
       if (allOpts.hasOwnProperty(lev1) && allOpts[lev1].hasOwnProperty(lev2)) {
         CriticalSnake.overridePostprocessOptions(allOpts[lev1][lev2].postprocess);
         CriticalSnake.overridePlaybackOptions(allOpts[lev1][lev2].playback);
-        console.log("Restored options for", playbackRecording, `(${lev2}):`,
+        console.log("Restored options for", sourceFileName, `(${lev2}):`,
                     allOpts[lev1][lev2]);
       } else {
-        console.log("No options stored for", playbackRecording, `(${lev2})`);
+        console.log("No options stored for", sourceFileName, `(${lev2})`);
       }
     }
 
@@ -270,10 +270,10 @@
       // Give the UI a chance to refresh and show the loading state.
       setTimeout(() => {
         try {
-          postprocessRecording();
+          playback.setDataset(postprocessRecording());
+          refreshView(playback.dataset.begin);
 
-          bikeMap.playbackGroup.setTimeRange(playback.dataset.begin, playback.dataset.end);
-          bikeMap.playbackGroup.show();
+          bikeMap.playbackGroup.show(playback.dataset.begin, playback.dataset.end);
           bikeMap.statsLabel.show();
         }
         catch (ex) {
@@ -286,24 +286,26 @@
 
     bikeMap.playbackGroup.downloadClicked = function() {
       bikeMap.playbackGroup.hide();
+      bikeMap.postprocessGroup.hide();
       bikeMap.loadingGroup.show();
 
       // Give the UI a chance to refresh and show the loading state.
       setTimeout(() => {
-        const baseName = playbackRecording.endsWith(".json")
-                       ? playbackRecording.slice(0, -5)
-                       : playbackRecording;
+        const baseName = sourceFileName.endsWith(".json")
+                       ? sourceFileName.slice(0, -5)
+                       : sourceFileName;
 
         downloadReplay(baseName + ".replay", {
           begin: playback.dataset.begin,
           end: playback.dataset.end,
           dataPoints: playback.dataset.dataPoints,
-          circles: playback.dataset.circles,
-          segments: playback.dataset.segments,
+          circles: playback.dataset.circles || [],
+          segments: playback.dataset.segments || [],
           options: CriticalSnake.PlaybackOptions,
         });
 
         bikeMap.loadingGroup.hide();
+        bikeMap.postprocessGroup.show();
         bikeMap.playbackGroup.show();
       }, 10);
     };
@@ -329,7 +331,7 @@
 
     function parseSnapshots(content, isCompressed, isWget) {
       const decompressed = isCompressed ? decompressDataset(content) : content;
-      playbackRecordingHash = hashCode(decompressed);
+      sourceFileHash = hashCode(decompressed);
 
       // Consider each line a raw snapshot from https://api.criticalmaps.net/postv2
       if (isWget) {
@@ -367,15 +369,12 @@
         return (offset / duration) * 100;
       };
 
-      // Allow to playback raw data for convenience
-      playback.setDataset({
+      return {
         dataPoints: dataPoints,
         tracks: tracks,
         begin: rawDataset.begin,
         end: rawDataset.end,
-      });
-
-      refreshView(rawDataset.begin);
+      }
     };
 
     function postprocessRecording() {
@@ -404,16 +403,14 @@
       const timeRange = PostProcessor.getTimeRange(circles);
       console.log("Data covers time range from/to:\n", timeRange.begin, "\n", timeRange.end);
 
-      playback.setDataset({
+      return {
         dataPoints: dataPoints,
         circles: circles,
         tracks: tracks,
         segments: segments,
         begin: timeRange.begin.getTime(),
         end: timeRange.end.getTime(),
-      });
-
-      refreshView(timeRange.begin.getTime());
+      }
     }
 
     function downloadReplay(filename, json) {
@@ -436,7 +433,7 @@
       bikeMap.statsLabel.update(playbackTime, bikeCount);
 
       const diff = Date.now() - refreshViewBegin;
-      console.log("Rendering frame took:", Math.round(diff / 10) * 10, "ms");
+      //console.log("Rendering frame took:", Math.round(diff / 10) * 10, "ms");
     }
 
     // ----------------------------------------------------
@@ -472,8 +469,8 @@
 
       for (const region in CriticalSnake.FilterBounds) {
         const bounds = CriticalSnake.FilterBounds[region];
-        console.log("Filter bounds for", region, ":", bounds);
         trackShadows.addLayer(L.rectangle(bounds, opts));
+        console.log(`${region}:`, bounds);
       }
 
       trackShadows.addTo(bikeMap);

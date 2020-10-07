@@ -113,17 +113,13 @@ function createBikeMap(L, options) {
   bikeMap.loadingSpinner = $("#loadingSpinner");
   bikeMap.loadingLabel = $("#loadingLabel");
 
-  const mouseEvents = "mouseup mousedown mousemove mousewheel";
-  const touchEvents = "touchstart touchend touchmove";
-  const dragEvents = "dragstart dragend dragover";
-
-  const relevantEvents = ["click"];
-  relevantEvents.push(dragEvents);
-  relevantEvents.push(L.Browser.touch ? touchEvents : mouseEvents);
-  const eventsStr = relevantEvents.join(' ');
-
   for (const group of controlGroups) {
-    L.DomEvent.on(group, eventsStr, L.DomEvent.stopPropagation);
+    if (!L.Browser.touch) {
+      L.DomEvent.disableClickPropagation(group);
+      L.DomEvent.on(group, 'mousewheel', L.DomEvent.stopPropagation);
+    } else {
+      L.DomEvent.on(group, 'click', L.DomEvent.stopPropagation);
+    }
   }
 
   return bikeMap;

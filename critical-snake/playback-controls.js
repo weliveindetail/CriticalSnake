@@ -18,7 +18,10 @@ L.Control.PlaybackGroup = L.Control.extend({
     L.setOptions(this, options);
   },
 
-  show: function() {
+  show: function(firstStamp, lastStamp) {
+    if (firstStamp && lastStamp)
+      this.setTimeRange(firstStamp, lastStamp);
+
     this.groupControl.style.display = "flex";
   },
 
@@ -80,7 +83,7 @@ L.Control.PlaybackGroup = L.Control.extend({
     this.downloadButton = this._addDownloadButton(this.groupControl);
     this.playbackButton = this._addPlaybackButton(this.groupControl);
     this.historySlider = this._addHistorySlider(this.groupControl);
-    this._addFpsControls(this.groupControl);
+    this._addSpeedControls(this.groupControl);
 
     return this.groupControl;
   },
@@ -217,16 +220,16 @@ L.Control.PlaybackGroup = L.Control.extend({
     return slider;
   },
 
-  _addFpsControls: function(parent) {
+  _addSpeedControls: function(parent) {
     const label = L.DomUtil.create('label', '', parent);
-    label.innerHTML = "Speedup:";
-    label.htmlFor = "fpsInput";
+    label.innerHTML = "Time-lapse:";
+    label.htmlFor = "timeLapseInput";
     label.style.padding = "0 5px";
     label.style.marginLeft = "0.5rem";
 
     const input = L.DomUtil.create('input', '', parent);
+    input.id = "timeLapseInput";
     input.type = "number";
-    input.id = "fpsInput";
     input.min = 50;
     input.max = 9000;
     input.step = 50;
@@ -234,8 +237,7 @@ L.Control.PlaybackGroup = L.Control.extend({
     input.style.width = "3rem";
     input.style.textAlign = "right";
 
-    L.DomEvent.on(input, "keydown", e => e.preventDefault());
-    L.DomEvent.on(input, "change", e => {
+    L.DomEvent.on(input, "change", () => {
       const value = Math.round(parseInt(input.value) / 50) * 50;
       this.options.speedup = value;
       input.value = value;

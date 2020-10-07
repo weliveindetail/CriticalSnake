@@ -151,8 +151,8 @@ L.Control.PostprocessGroup = L.Control.extend({
     // Change notifications are sent from all color boxes that have the index
     // field (all except the plusButton).
     const notifySnakeColorChanged = (box, color) => {
-      if (box.dataset.index) {
-        box.style.backgroundColor = color.hex;
+      if (box.dataset.hasOwnProperty("index")) {
+        box.style.backgroundColor = color;
         this.snakeColorChanged(box.dataset.index, color);
         return true;
       }
@@ -171,10 +171,10 @@ L.Control.PostprocessGroup = L.Control.extend({
           parent: box,
           color: box.style.backgroundColor,
           onDone: color => {
-            if (notifySnakeColorChanged(box, color.hex))
-              return;
-            console.assert(box == plusButton);
-            appendNewBox(color.hex);
+            if (!notifySnakeColorChanged(box, color.hex)) {
+              console.assert(box == plusButton);
+              appendNewBox(color.hex);
+            }
           },
           onChange: color => {
             notifySnakeColorChanged(box, color.hex);
@@ -232,28 +232,17 @@ L.Control.PostprocessGroup = L.Control.extend({
       notifyTimeRangeChanged(values);
     });
 
-    if (this.options.timeRange.endStamp != 0) {
-      // Take over initial value from options.
-      const opts = this.options.timeRange;
-      const stamps = [ opts.startStamp, opts.originsStamp, opts.endStamp ];
-      const percents = stamps.map(this.timestampToPercent);
-      slider.noUiSlider.set(percents);
+    // Take over initial value from options.
+    const opts = this.options.timeRange;
+    const stamps = [ opts.startStamp, opts.originsStamp, opts.endStamp ];
+    const percents = stamps.map(this.timestampToPercent);
+    slider.noUiSlider.set(percents);
 
-      this.timeRangeChanged({
-        start: opts.startStamp,
-        origins: opts.originsStamp,
-        end: opts.endStamp,
-      });
-    } else {
-      // Otherwise, store defaults as initial values in options.
-      const percents = [0, 10, 100];
-      const stamps = percents.map(this.percentToTimestamp);
-      this.options.timeRange = {
-        startStamp: stamps[0],
-        originsStamp: stamps[1],
-        endStamp: stamps[2],
-      };
-    }
+    this.timeRangeChanged({
+      start: opts.startStamp,
+      origins: opts.originsStamp,
+      end: opts.endStamp,
+    });
   },
 
   // Mandatory overrides
