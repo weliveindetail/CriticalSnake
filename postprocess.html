@@ -57,7 +57,6 @@
 
   <script src="3rd-party/leaflet16/leaflet.js"></script>
   <script src="3rd-party/leaflet-semicircle20/Semicircle.js"></script>
-  <script src="3rd-party/jquery35/jquery-3.5.1.min.js"></script>
   <script src="3rd-party/geodesy11/latlon-spherical.min.js"></script>
   <script src="3rd-party/lzstring14/lz-string.min.js"></script>
   <script src="3rd-party/filesaver20/FileSaver.min.js"></script>
@@ -84,8 +83,6 @@
 
     const params = parseUrlParams(window.location.href);
     const bikeMap = createBikeMap(L);
-    bikeMap.browseGroup.show();
-    bikeMap.loadingGroup.hide();
 
     bikeMap.playbackGroup = new L.Control.PlaybackGroup({
       position: 'bottomleft',
@@ -104,31 +101,30 @@
     // We use the default zoom controls group, but we add the playback group
     // first, so that it shows up below the zoom group.
     bikeMap.playbackGroup.addTo(bikeMap);
+    bikeMap.loadingGroup.addTo(bikeMap);
+    bikeMap.browseGroup.addTo(bikeMap);
     bikeMap.zoomButtons.addTo(bikeMap);
     bikeMap.statsLabel.addTo(bikeMap);
+    bikeMap.browseGroup.show();
 
     const playback = new CriticalSnake.Playback(bikeMap);
 
     let rawDataset = {};
     let sourceFileName = null;
     let sourceFileHash = null;
-    bikeMap.browseButton.change(function() {
+    bikeMap.browseGroup.fileSelected = function(blob) {
       // Validate selection and set visual indication for the loading progress.
       bikeMap.browseGroup.hide();
       bikeMap.loadingGroup.show();
       bikeMap.playbackGroup.hide();
       bikeMap.postprocessGroup.remove();
 
-      if (this.files.length == 0)
-        return;
-      if (this.files.length > 1)
-        console.warn("Can only playback one file at a time:", this.files[0].name);
-
       // Load and parse the actual file content.
       const reader = new FileReader();
-      $(reader).on('load', (event) => {
+      sourceFileName = blob.name;
+
+      reader.onload = (event) => {
         try {
-          sourceFileName = this.files[0].name;
           const snapshots = parseSnapshots(
               event.target.result,
               sourceFileName.endsWith(".recording"),
@@ -147,15 +143,15 @@
         }
         catch (ex) {
           bikeMap.browseGroup.show();
-          console.error("JSON parsing for file", this.files[0].name,
+          console.error("JSON parsing for file", sourceFileName,
                         "failed with", ex);
         }
         bikeMap.loadingGroup.hide();
-      });
+      };
 
       // Give the UI a chance to refresh and show the loading state.
-      setTimeout(() => reader.readAsText(this.files[0]), 10);
-    });
+      setTimeout(() => reader.readAsText(blob), 10);
+    };
 
     bikeMap.postprocessGroup.timeRangeChanged = function(timeRange) {
       // Overwrite post-process parameters from control values in the global

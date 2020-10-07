@@ -26,7 +26,15 @@ function createBikeMap(L, options) {
     { attribution: `<a href="${wiki.url}">${wiki.title}</a> | ` +
                    `&copy; <a href="${osm.url}">${osm.title}</a>` }));
 
-  const controlGroups = [];
+  const disableClickThrough = function(control) {
+    if (!L.Browser.touch) {
+      L.DomEvent.disableClickPropagation(control);
+      L.DomEvent.on(control, 'mousewheel', L.DomEvent.stopPropagation);
+    } else {
+      L.DomEvent.on(control, 'click', L.DomEvent.stopPropagation);
+    };
+    return control;
+  };
 
   L.Control.StatsView = L.Control.extend({
     onAdd: function() {
@@ -34,8 +42,7 @@ function createBikeMap(L, options) {
       this.label.style.padding = "3px 8px";
       this.label.style.backgroundColor = "#fff";
       this.label.style.display = "none";
-      controlGroups.push(this.label);
-      return this.label;
+      return disableClickThrough(this.label);
     },
 
     update: function(time, bikeCount) {
@@ -59,68 +66,73 @@ function createBikeMap(L, options) {
 
   L.Control.BrowseGroup = L.Control.extend({
     onAdd: function() {
-      const browseGroup = L.DomUtil.create('div', 'leaflet-bar');
-      browseGroup.id = "browseGroup";
-      browseGroup.style.display = "flex";
-      browseGroup.style.alignItems = "center";
-      browseGroup.style.backgroundColor = "#fff";
-      browseGroup.style.padding = "5px";
+      this.group = L.DomUtil.create('div', 'leaflet-bar');
+      this.group.style.display = "none";
+      this.group.style.alignItems = "center";
+      this.group.style.backgroundColor = "#fff";
+      this.group.style.padding = "5px";
 
-      const browseButton = L.DomUtil.create('input', '', browseGroup);
-      browseButton.id = "browseButton";
+      const browseButton = L.DomUtil.create('input', '', this.group);
       browseButton.type = "file";
       browseButton.style.border = "0";
 
-      controlGroups.push(browseGroup);
-      return browseGroup;
+      const self = this;
+      L.DomEvent.on(browseButton, "change", function() {
+        if (this.files.length > 0) {
+          self.fileSelected(this.files[0]);
+        }
+      });
+
+      return disableClickThrough(this.group);
+    },
+
+    show: function() {
+      this.group.style.display = "flex";
+    },
+
+    hide: function() {
+      this.group.style.display = "none";
+    },
+
+    fileSelected: function(e) {
+      console.log("Selected file in BrowseGroup:", e);
     },
   });
 
   L.Control.LoadingGroup = L.Control.extend({
     onAdd: function() {
-      const loadingGroup = L.DomUtil.create('div', 'leaflet-bar');
-      loadingGroup.id = "loadingGroup";
-      loadingGroup.style.display = "flex";
-      loadingGroup.style.alignItems = "center";
-      loadingGroup.style.backgroundColor = "#fff";
-      loadingGroup.style.padding = "5px";
+      this.group = L.DomUtil.create('div', 'leaflet-bar');
+      this.group.style.display = "none";
+      this.group.style.alignItems = "center";
+      this.group.style.backgroundColor = "#fff";
+      this.group.style.padding = "5px";
 
-      const loadingSpinner = L.DomUtil.create('img', '', loadingGroup);
+      const loadingSpinner = L.DomUtil.create('img', '', this.group);
       loadingSpinner.id = "loadingSpinner";
       loadingSpinner.src = "img/spinner-icon-gif-29.gif";
       loadingSpinner.style.height = "1.5em";
 
-      const loadingLabel = L.DomUtil.create('label', '', loadingGroup);
+      const loadingLabel = L.DomUtil.create('label', '', this.group);
       loadingLabel.id = "loadingLabel";
       loadingLabel.innerHTML = "Loading";
       loadingLabel.style.margin = "0 0.33em";
 
-      controlGroups.push(loadingGroup);
-      return loadingGroup;
+      return disableClickThrough(this.group);
+    },
+
+    show: function() {
+      this.group.style.display = "flex";
+    },
+
+    hide: function() {
+      this.group.style.display = "none";
     },
   });
 
   bikeMap.zoomButtons = new L.Control.Zoom({ position: 'bottomleft' });
   bikeMap.statsLabel = new L.Control.StatsView({ position: 'topleft' });
-
-  (new L.Control.BrowseGroup({ position: 'bottomleft' })).addTo(bikeMap);
-  (new L.Control.LoadingGroup({ position: 'bottomleft' })).addTo(bikeMap);
-
-  bikeMap.browseGroup = $("#browseGroup");
-  bikeMap.browseButton = $("#browseButton");
-
-  bikeMap.loadingGroup = $("#loadingGroup");
-  bikeMap.loadingSpinner = $("#loadingSpinner");
-  bikeMap.loadingLabel = $("#loadingLabel");
-
-  for (const group of controlGroups) {
-    if (!L.Browser.touch) {
-      L.DomEvent.disableClickPropagation(group);
-      L.DomEvent.on(group, 'mousewheel', L.DomEvent.stopPropagation);
-    } else {
-      L.DomEvent.on(group, 'click', L.DomEvent.stopPropagation);
-    }
-  }
+  bikeMap.browseGroup = new L.Control.BrowseGroup({ position: 'bottomleft' });
+  bikeMap.loadingGroup = new L.Control.LoadingGroup({ position: 'bottomleft' });
 
   return bikeMap;
 }
