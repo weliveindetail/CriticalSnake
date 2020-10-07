@@ -173,9 +173,9 @@ CriticalSnake.PostProcessor = function() {
     const dataPoints = sortedPoolIdxs.map(newIdx => pool[newIdx]);
 
     // A track is an array of indexes into dataPoints. Each dataPoint has a
-    // nextIdx that points to the next dataPoint in the track or indicates the
-    // end of the track (null).
-    const tracks = perTrackPoolIdxs.map(oldTrackIdxs => {
+    // nextIdxInTrack that points to the next dataPoint in the track or
+    // indicates the end of the track (null).
+    const tracks = perTrackPoolIdxs.map((oldTrackIdxs, t) => {
       const newTrackIdxs = [ lookup[oldTrackIdxs[0]] ];
       for (let i = 1; i < oldTrackIdxs.length; i++) {
         const oldIdx = oldTrackIdxs[i];
@@ -183,11 +183,13 @@ CriticalSnake.PostProcessor = function() {
 
         const predInTrack = dataPoints[back(newTrackIdxs)];
         predInTrack.direction = geodesyBearing(predInTrack, dataPoints[newIdx]);
-        predInTrack.nextIdx = newIdx;
+        predInTrack.nextIdxInTrack = newIdx;
+        predInTrack.trackIdx = t;
 
         newTrackIdxs.push(newIdx);
       }
-      dataPoints[back(newTrackIdxs)].nextIdx = null;
+      dataPoints[back(newTrackIdxs)].nextIdxInTrack = null;
+      dataPoints[back(newTrackIdxs)].trackIdx = t;
       return newTrackIdxs;
     });
 
@@ -416,7 +418,7 @@ CriticalSnake.PostProcessor = function() {
   }
 
   function findSamplePoints(dataPoints, idx, options) {
-    const nextIdx = dataPoints[idx].nextIdx;
+    const nextIdx = dataPoints[idx].nextIdxInTrack;
     if (nextIdx == null)
       return [ dataPoints[idx] ];
 
@@ -603,7 +605,7 @@ CriticalSnake.PostProcessor = function() {
     }
   });
 
-  this.associateSnakes = function(dataPoints, circles) {
+  this.associateSnakes = function(dataPoints, circles, tracks) {
     const opts = CriticalSnake.PostProcessOptions.associateSnakes;
     const snakes = circles.map(_ => new Set());
 
@@ -637,9 +639,9 @@ CriticalSnake.PostProcessor = function() {
 
     snakeOrigins.map((snake, snakeIdx) => {
       for (const circle of snake) {
-        for (const idx of circle.dataPointIdxs) {
-          for (let p = dataPoints[idx]; p.nextIdx; p = dataPoints[p.nextIdx]) {
-            for (const circleIdx of p.circleIdxs) {
+        for (const inCircleIdx of circle.dataPointIdxs) {
+          for (const inTrackIdx of tracks[dataPoints[inCircleIdx].trackIdx]) {
+            for (const circleIdx of dataPoints[inTrackIdx].circleIdxs) {
               snakes[circleIdx].add(snakeIdx);
             }
           }

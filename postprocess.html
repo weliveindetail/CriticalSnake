@@ -394,7 +394,7 @@
       console.log("Populating circles took:", Date.now() - detectCirclesBegin, "ms");
 
       const associateSnakesBegin = Date.now();
-      const snakes = PostProcessor.associateSnakes(dataPoints, circles);
+      const snakes = PostProcessor.associateSnakes(dataPoints, circles, tracks);
       console.log("Snakes detected by origin:", snakes);
       console.log("Associating snakes took:", Date.now() - associateSnakesBegin, "ms");
 
