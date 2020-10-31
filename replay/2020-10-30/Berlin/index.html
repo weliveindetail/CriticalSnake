@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="description" content="23 Jahre Critical Mass Berlin: Replay vom 30. Oktober 2020" />
+  <meta name="keywords" content="Critical Mass CriticalMaps CriticalSnake Berlin 2020 CM bike bicycle cycle Fahrrad community event ride velo fahrradfreundlich Treffpunkt" />
+
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="CriticalSnake"/>
+  <meta property="og:url" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-10-30/Berlin/"/>
+  <meta property="og:image" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-10-30/Berlin/img/preview_small.png"/>
+  <meta property="og:description" content="Critical Mass Berlin: Replay vom 30. Oktober 2020"/>
+  <meta property="og:updated_time" content="2020-10-31T00:00:00-02:00" />
+  <meta property="og:image:width" content="800" />
+  <meta property="og:image:height" content="476" />
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@CriticalSnake">
+  <meta name="twitter:title" content="CriticalSnake">
+  <meta name="twitter:url" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-10-30/Berlin/"/>
+  <meta name="twitter:image" content="https://weliveindetail.github.io/CriticalSnake/replay/2020-10-30/Berlin/img/preview_small.png">
+  <meta name="twitter:description" content="Critical Mass Berlin: Replay vom 30. Oktober 2020">
+  <meta property="og:updated_time" content="2020-10-31T00:00:00-02:00" />
+  <meta property="og:image:width" content="800" />
+  <meta property="og:image:height" content="476" />
+
+  <title>Critical Mass Berlin - 30. Oktober 2020</title>
+
+  <link rel="stylesheet" href="3rd-party/leaflet16/leaflet.css">
+  <style>
+    body {
+      font-size: 1rem;
+    }
+    #osm-map {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="osm-map"></div>
+
+  <script src="3rd-party/leaflet16/leaflet.js"></script>
+  <script src="3rd-party/leaflet-semicircle20/Semicircle.js"></script>
+  <script src="3rd-party/lzstring14/lz-string.min.js"></script>
+
+  <script src="critical-snake/core.js"></script>
+  <script src="critical-snake/playback.js"></script>
+  <script src="critical-snake/playback-controls.js"></script>
+  <script src="critical-snake/bikemap.js"></script>
+
+  <script>
+    const bikeMap = createBikeMap(L, {
+      center: [52.517, 13.385],
+      zoom: 13,
+    });
+
+    bikeMap.playbackGroup = new L.Control.PlaybackGroup({
+      position: 'bottomleft',
+      fps: CriticalSnake.PlaybackOptions.fps,
+      speedup: CriticalSnake.PlaybackOptions.speedup,
+      autoLimitFps: CriticalSnake.PlaybackOptions.autoLimitFps,
+      allowDownload: false,
+      status: CriticalSnake.PlaybackStatus,
+    });
+
+    // We use the default zoom controls group, but we add the playback group
+    // first, so that it shows up below the zoom group.
+    bikeMap.playbackGroup.addTo(bikeMap);
+    bikeMap.loadingGroup.addTo(bikeMap);
+    bikeMap.browseGroup.addTo(bikeMap);
+    bikeMap.zoomButtons.addTo(bikeMap);
+    bikeMap.statsLabel.addTo(bikeMap);
+
+    const playback = new CriticalSnake.Playback(bikeMap);
+
+    function decompressReplay(data) {
+      const kilobyte = (str) => Math.round((str.length * 2) / 1024);
+      console.log("Compressed size is:", kilobyte(data), "KB");
+
+      const decompressionBegin = Date.now();
+      const content = LZString.decompressFromUTF16(data);
+      console.log("Decompressed size is:", kilobyte(content), "KB");
+      console.log("Decompression took:", Date.now() - decompressionBegin, "ms");
+
+      return content;
+    }
+
+    function refreshView(playbackTime) {
+      playbackTime = playbackTime || CriticalSnake.PlaybackStatus.frameTime;
+
+      const refreshViewBegin = Date.now();
+      const bikeCount = playback.drawScene(playbackTime);
+      bikeMap.statsLabel.update(playbackTime, bikeCount);
+
+      const diff = Date.now() - refreshViewBegin;
+      //console.log("Rendering frame took:", Math.round(diff / 10) * 10, "ms");
+    }
+
+    bikeMap.playbackGroup.renderFrame = function(timestamp) {
+      refreshView(timestamp);
+    };
+
+    bikeMap.playbackGroup.playbackToggled = function(running) {
+      if (running) {
+        const fps = CriticalSnake.PlaybackOptions.fps;
+        const speed = CriticalSnake.PlaybackOptions.speedup;
+        console.log(`Replay ${fps}FPS in ${speed}x time-lapse`);
+      }
+    };
+
+    (async function() {
+      const response = await fetch("2020-10-30.replay");
+      const content = decompressReplay(await response.text());
+      playback.setDataset(JSON.parse(content));
+      refreshView(playback.dataset.begin);
+
+      bikeMap.playbackGroup.show(playback.dataset.begin, playback.dataset.end);
+      bikeMap.statsLabel.show();
+    })();
+  </script>
+</body>
+</html>
