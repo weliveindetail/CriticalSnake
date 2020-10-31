@@ -12,19 +12,12 @@ function createBikeMap(L, options) {
     touchZoom: true,
   });
 
-  const wiki = {
-    url: "https://foundation.wikimedia.org/wiki/Maps_Terms_of_Use",
-    title: "Wikimedia maps",
-  };
-  const osm = {
-    url: "http://osm.org/copyright",
-    title: "OpenStreetMap",
-  };
-
   bikeMap.addLayer(L.tileLayer(
-    'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
-    { attribution: `<a href="${wiki.url}">${wiki.title}</a> | ` +
-                   `&copy; <a href="${osm.url}">${osm.title}</a>` }));
+    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}.png',
+    { attribution:
+      '<a href="https://carto.com/help/building-maps/basemap-list/">Map tiles by Carto under CC BY 3.0</a> | ' +
+      '<a href="http://osm.org/copyright">Data by OpenStreetMap under ODbL</a> | '
+    }));
 
   const disableClickThrough = function(control) {
     if (!L.Browser.touch) {
