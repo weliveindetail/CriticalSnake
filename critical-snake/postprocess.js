@@ -25,6 +25,7 @@ CriticalSnake.FilterBounds = {
   Berlin: L.latLngBounds([52.42, 13.21], [52.61, 13.58]),
   Barcelona: L.latLngBounds([41.26, 2.00], [41.45, 2.29]),
   Leipzig: L.latLngBounds([51.29, 12.29], [51.37, 12.45]),
+  Mainz: L.latLngBounds([49.90, 8.11], [50.10, 8.40]),
 };
 
 CriticalSnake.PostProcessor = function() {
