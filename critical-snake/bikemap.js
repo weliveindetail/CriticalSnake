@@ -22,9 +22,10 @@ function createBikeMap(L, options) {
   };
 
   bikeMap.addLayer(L.tileLayer(
-    'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
-    { attribution: `<a href="${wiki.url}">${wiki.title}</a> | ` +
-                   `&copy; <a href="${osm.url}">${osm.title}</a>` }));
+    'https://{s}.tile.osm.org/{z}/{x}/{y}.png',
+    { attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors' }
+  ));
+
 
   const disableClickThrough = function(control) {
     if (!L.Browser.touch) {
