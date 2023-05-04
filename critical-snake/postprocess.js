@@ -22,10 +22,18 @@ CriticalSnake.populatePostprocessOptions = function(incoming) {
 };
 
 CriticalSnake.FilterBounds = {
+  Aschaffenburg: L.latLngBounds([49.85, 8.92],[50.07, 9.29]),
+  Augsburg: L.latLngBounds([48.24, 10.60],[48.49, 11.13]),
+  Bayreuth: L.latLngBounds([49.83, 11.40],[50.02, 11.75]),
   Berlin: L.latLngBounds([52.42, 13.21], [52.61, 13.58]),
   Barcelona: L.latLngBounds([41.26, 2.00], [41.45, 2.29]),
+  Hof: L.latLngBounds([50.24, 11.78],[50.38, 12.04]),
   Leipzig: L.latLngBounds([51.29, 12.29], [51.37, 12.45]),
+  München: L.latLngBounds([47.83, 10.77],[48.46, 12.29]),
+  München_zoomed: L.latLngBounds([46.83, 09.77],[49.46, 13.29]),
+  München_Augsburg: L.latLngBounds([47.97, 10.52],[48.50, 12.14]),
   Mainz: L.latLngBounds([49.90, 8.11], [50.10, 8.40]),
+  Nürnberg: L.latLngBounds([49.34, 10.88],[49.55, 11.27]),
 };
 
 CriticalSnake.PostProcessor = function() {
