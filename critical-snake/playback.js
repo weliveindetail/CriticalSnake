@@ -24,8 +24,11 @@ CriticalSnake.PlaybackOptions = {
   // currently offers.
   autoLimitFps: true,
 
-  // The color used to draw tracks and circles not associated with a snake.
-  defaultColor: "#888", // grey
+  // The color of raw tracks and circles not associated with a snake.
+  defaultColor: "#00f",
+
+  // The opacity of raw tracks.
+  defaultOpacity: 0.1,
 
   // Colors for tracks and circles by snake-index.
   snakeColors: [
@@ -104,7 +107,7 @@ CriticalSnake.Playback = function(bikeMap) {
 
   function drawRawTracks(canvas, dataPoints, tracks, stamp, range, opacity) {
     range = range || 10;
-    opacity = opacity || 0.1;
+    opacity = opacity || CriticalSnake.PlaybackOptions.defaultOpacity;
 
     canvas.clearLayers();
 
@@ -124,7 +127,7 @@ CriticalSnake.Playback = function(bikeMap) {
         visibleBikes += 1;
         canvas.addLayer(
             L.polyline(coords, {
-              color: "#888",
+              color: CriticalSnake.PlaybackOptions.defaultColor,
               opacity: opacity
             }));
       }
